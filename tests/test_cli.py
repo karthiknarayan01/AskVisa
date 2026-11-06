@@ -14,6 +14,7 @@ from runtime.events import EventLog
 from runtime.messages import ToolCall
 from runtime.migrate import migrate
 from runtime.model import ModelError, ModelReply
+from runtime.tools import Tool
 from tests.fake_model import FakeModel, call, say
 
 
@@ -69,36 +70,36 @@ def test_interrupted_turn_is_finished_on_start(tmp_path, monkeypatch):
     assert "sorry for the wait" in out
 
 
-def test_write_asks_for_approval_and_runs_on_yes(tmp_path, monkeypatch):
-    workspace = _workspace(tmp_path)
-    _use_model(monkeypatch, FakeModel([call("write_file", path="a.txt", content="hi"), say("written")]))
-    out = _run(tmp_path, ["--workspace", str(workspace)], ["write a.txt", "y"])
+def test_a_tool_that_needs_approval_asks_and_runs_on_yes(tmp_path, monkeypatch):
+    saved = _use_approval_tool(monkeypatch)
+    _use_model(monkeypatch, FakeModel([call("save_note", text="hi"), say("saved")]))
+    out = _run(tmp_path, [], ["save a note", "y"])
 
-    assert "Allow write_file?" in out and "new file, 1 line" in out
-    assert "● write_file  path=a.txt  content=hi" in out
-    assert "⎿  wrote 2 characters to a.txt" in out
-    assert (workspace / "a.txt").read_text() == "hi"
+    assert "Allow save_note?" in out
+    assert "● save_note  text=hi" in out
+    assert "⎿  saved hi" in out
+    assert saved == ["hi"]
 
 
-def test_denied_write_never_runs(tmp_path, monkeypatch):
-    workspace = _workspace(tmp_path)
-    _use_model(monkeypatch, FakeModel([call("write_file", path="a.txt", content="hi")]))
-    out = _run(tmp_path, ["--workspace", str(workspace)], ["write a.txt", "n"])
+def test_denied_tool_never_runs(tmp_path, monkeypatch):
+    saved = _use_approval_tool(monkeypatch)
+    _use_model(monkeypatch, FakeModel([call("save_note", text="hi")]))
+    out = _run(tmp_path, [], ["save a note", "n"])
 
-    assert "Stopped: you denied write_file." in out
-    assert not (workspace / "a.txt").exists()
+    assert "Stopped: you denied save_note." in out
+    assert saved == []
 
 
 def test_work_is_shown_in_the_order_it_happens(tmp_path, monkeypatch):
-    workspace = _workspace(tmp_path)
-    narrate_and_write = ModelReply(
-        text="I'll create the file.",
-        tool_calls=(ToolCall("c1", "write_file", {"path": "a.txt", "content": "hi"}),),
+    _use_approval_tool(monkeypatch)
+    narrate_and_save = ModelReply(
+        text="I'll save it.",
+        tool_calls=(ToolCall("c1", "save_note", {"text": "hi"}),),
     )
-    _use_model(monkeypatch, FakeModel([narrate_and_write, say("All written.")]))
-    out = _run(tmp_path, ["--workspace", str(workspace)], ["write a.txt", "y"])
+    _use_model(monkeypatch, FakeModel([narrate_and_save, say("All saved.")]))
+    out = _run(tmp_path, [], ["save a note", "y"])
 
-    order = [out.index(s) for s in ("I'll create the file.", "Allow write_file?", "● write_file", "All written.")]
+    order = [out.index(s) for s in ("I'll save it.", "Allow save_note?", "● save_note", "All saved.")]
     assert order == sorted(order)
 
 
@@ -141,28 +142,29 @@ def test_no_web_flag_removes_the_web_tools(tmp_path, monkeypatch):
 
 
 def test_yes_flag_approves_without_asking(tmp_path, monkeypatch):
-    workspace = _workspace(tmp_path)
-    _use_model(monkeypatch, FakeModel([call("write_file", path="a.txt", content="hi"), say("done")]))
-    out = _run(tmp_path, ["--workspace", str(workspace), "--yes"], ["write a.txt"])
+    saved = _use_approval_tool(monkeypatch)
+    _use_model(monkeypatch, FakeModel([call("save_note", text="hi"), say("done")]))
+    out = _run(tmp_path, ["--yes"], ["save a note"])
 
-    assert "Allow write_file?" not in out and "automatic (--yes)" in out
-    assert (workspace / "a.txt").read_text() == "hi"
+    assert "Allow save_note?" not in out and "automatic (--yes)" in out
+    assert saved == ["hi"]
 
 
 def test_ctrl_c_during_a_turn_cancels_it_and_the_chat_goes_on(tmp_path, monkeypatch):
-    workspace = _workspace(tmp_path)
-    _use_model(monkeypatch, FakeModel([call("write_file", path="a.txt", content="hi"), say("next answer")]))
-    out = _run(tmp_path, ["--workspace", str(workspace)], ["write a.txt", KeyboardInterrupt, "something else"])
+    saved = _use_approval_tool(monkeypatch)
+    _use_model(monkeypatch, FakeModel([call("save_note", text="hi"), say("next answer")]))
+    out = _run(tmp_path, [], ["save a note", KeyboardInterrupt, "something else"])
 
     assert "Turn cancelled." in out
     assert "next answer" in out
-    assert not (workspace / "a.txt").exists()
+    assert saved == []
 
 
 def test_turn_errors_are_printed_not_raised(tmp_path, monkeypatch):
-    model = FakeModel([call("list_files", call_id=f"c{i}") for i in range(25)])
+    _use_approval_tool(monkeypatch)
+    model = FakeModel([call("save_note", call_id=f"c{i}", text="x") for i in range(25)])
     _use_model(monkeypatch, model)
-    out = _run(tmp_path, ["--workspace", str(tmp_path)], ["loop forever"])
+    out = _run(tmp_path, ["--yes"], ["loop forever"])
     assert "Turn stopped: no final answer after 20 steps" in out
 
 
@@ -277,10 +279,21 @@ def _use_model(monkeypatch, model):
     monkeypatch.setattr(cli, "make_model", lambda provider, model_name=None: model)
 
 
-def _workspace(tmp_path):
-    workspace = tmp_path / "ws"
-    workspace.mkdir()
-    return workspace
+def _use_approval_tool(monkeypatch):
+    """Give the agent a `save_note` tool that needs approval; returns the notes it saved."""
+    saved = []
+
+    def save_note(text):
+        saved.append(text)
+        return f"saved {text}"
+
+    tool = Tool(
+        "save_note", "Save a note.",
+        {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+        save_note, requires_approval=True,
+    )
+    monkeypatch.setattr(cli, "agent_tools", lambda web: [tool])
+    return saved
 
 
 def _run(tmp_path, args, inputs):

@@ -21,12 +21,12 @@ class FakeSession:
 
 def test_a_tool_call_and_its_result():
     out = _draw(
-        [ToolCall("c1", "read_file", {"path": "config.py"})],
+        [ToolCall("c1", "web_search", {"query": "H-1B cap"})],
         _event("tool_started", call_id="c1"),
-        _event("tool_finished", call_id="c1", output="    1  a\n    2  b", is_error=False),
+        _event("tool_finished", call_id="c1", output="[1] A\nu\nx\n\n[2] B\nv\ny", is_error=False),
     )
-    assert "● read_file  path=config.py" in out
-    assert "⎿  2 lines" in out
+    assert "● web_search  query=H-1B cap" in out
+    assert "⎿  2 results" in out
 
 
 def test_an_error_result():
@@ -40,14 +40,14 @@ def test_an_error_result():
 
 def test_parallel_results_say_which_call_they_belong_to():
     out = _draw(
-        [ToolCall("c1", "read_file", {"path": "a"}), ToolCall("c2", "list_files", {})],
+        [ToolCall("c1", "web_search", {"query": "a"}), ToolCall("c2", "read_web_page", {"url": "u"})],
         _event("tool_started", call_id="c1"),
         _event("tool_started", call_id="c2"),
-        _event("tool_finished", call_id="c2", output="a\nb\nc", is_error=False),
-        _event("tool_finished", call_id="c1", output="    1  x", is_error=False),
+        _event("tool_finished", call_id="c2", output="x" * 1500, is_error=False),
+        _event("tool_finished", call_id="c1", output="No results.", is_error=False),
     )
-    assert "⎿  list_files: 3 files" in out
-    assert "⎿  read_file: 1 line" in out
+    assert "⎿  read_web_page: 1,500 characters" in out
+    assert "⎿  web_search: no results" in out
 
 
 def test_multi_line_arguments_are_shown_by_size():
@@ -107,8 +107,6 @@ def test_usage_is_added_up_for_the_turn():
 @pytest.mark.parametrize(
     "tool, output, summary",
     [
-        ("read_file", "    1  a", "1 line"),
-        ("list_files", "(no files)", "no files"),
         ("web_search", "[1] A\nu\nx\n\n[2] B\nv\ny", "2 results"),
         ("web_search", "No results.", "no results"),
         ("read_web_page", "x" * 1500, "1,500 characters"),

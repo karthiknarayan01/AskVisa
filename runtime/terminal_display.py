@@ -1,11 +1,11 @@
 """Rendering a turn in the terminal with rich, from the session's live event stream.
 
     ⠋ Thinking… 2s                                   spinner while waiting for the model
-    ● read_file  path=config.py                      a tool call starts
-      ⎿  12 lines  0.1s                              its result: a one-line summary
-    ● write_file  path=config.py  content=DEBUG = …
-      ⎿  ✗ write_file failed: PermissionError …      an error, in red
-    Fixed: `DEBGU` → `DEBUG`.                        the answer, rendered as markdown while
+    ● web_search  query=H-1B cap 2027                a tool call starts
+      ⎿  5 results  1.2s                             its result: a one-line summary
+    ● read_web_page  url=https://www.uscis.gov/…
+      ⎿  ✗ read_web_page failed: timed out           an error, in red
+    The FY2027 cap is **65,000** …                   the answer, rendered as markdown while
                                                      it streams in
 
 On a terminal, the spinner and the streaming answer redraw in place. Elsewhere (a pipe, a file,
@@ -216,10 +216,6 @@ class TurnDisplay:
 def summarize(tool: str, output: str) -> str:
     """A one-line summary of a successful tool result."""
     lines = output.splitlines()
-    if tool == "read_file":
-        return _count(len(lines), "line")
-    if tool == "list_files":
-        return "no files" if output == "(no files)" else _count(len(lines), "file")
     if tool == "web_search":
         count = sum(1 for line in lines if line.startswith("[") and "] " in line)
         return "no results" if output == "No results." else _count(count, "result")
