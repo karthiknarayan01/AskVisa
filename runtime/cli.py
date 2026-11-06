@@ -1,6 +1,6 @@
 """Command-line chat: `agent-runtime`.
 
-    agent-runtime                              new session, Anthropic, workspace = current dir
+    agent-runtime                              new session, Anthropic
     agent-runtime --provider deepseek          use DeepSeek
     agent-runtime --provider ollama            a model on this computer (default qwen3.5:9b)
     agent-runtime --resume latest              continue the most recent session
@@ -59,9 +59,8 @@ from runtime.session import (
 from runtime.terminal_approval import TerminalApprover
 from runtime.terminal_display import TurnDisplay, TurnStats
 from runtime.terminal_input import Interrupted, Terminal
-from runtime.tools import ToolRegistry
+from runtime.tools import Tool, ToolRegistry
 from runtime.web_tools import web_tools
-from runtime.workspace_tools import workspace_tools
 
 DEFAULT_DB = "agent.db"
 HISTORY_FILE = Path.home() / ".local" / "state" / "agent-runtime" / "history"
@@ -96,7 +95,6 @@ def main(
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="agent-runtime", description="Chat with a tool-using agent.")
     parser.add_argument("--db", default=DEFAULT_DB, help=f"SQLite file for sessions (default {DEFAULT_DB})")
-    parser.add_argument("--workspace", default=".", help="directory the file tools work in (default .)")
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="anthropic")
     parser.add_argument("--model", help="model name (default: the provider's default)")
     parser.add_argument("--resume", metavar="SESSION", help="session id to continue, or 'latest'")
@@ -159,8 +157,7 @@ def make_chat(args: argparse.Namespace, console: Console, read, log: EventLog) -
     except (RuntimeError, ValueError) as e:
         raise SystemExit(str(e)) from None
     web = not args.no_web
-    workspace = Path(args.workspace)
-    tools = ToolRegistry(workspace_tools(workspace) + (web_tools() if web else []))
+    tools = ToolRegistry(agent_tools(web))
     chat = Chat(
         args=args,
         console=console,
@@ -171,7 +168,7 @@ def make_chat(args: argparse.Namespace, console: Console, read, log: EventLog) -
         tools=tools,
         options={},
     )
-    approver: Approver = AutoApprove() if args.yes else TerminalApprover(chat.terminal, console, workspace)
+    approver: Approver = AutoApprove() if args.yes else TerminalApprover(chat.terminal, console)
     chat.options = {"approver": approver, "system_prompt": system_prompt(date.today(), web)}
     window = getattr(model, "context_window", None)
     if window is not None:
@@ -188,6 +185,11 @@ def make_chat(args: argparse.Namespace, console: Console, read, log: EventLog) -
     return chat
 
 
+def agent_tools(web: bool) -> list[Tool]:
+    """The tools the agent gets: the web tools, unless web search is turned off."""
+    return web_tools() if web else []
+
+
 def show_welcome(chat: Chat) -> None:
     """The panel at the start: what this session is and how to use it."""
     args, session = chat.args, chat.session
@@ -195,7 +197,6 @@ def show_welcome(chat: Chat) -> None:
     rows.add_column(style="dim")
     rows.add_column()
     rows.add_row("model", f"{chat.model_name} ({args.provider})")
-    rows.add_row("workspace", str(Path(args.workspace).resolve()))
     if args.resume is None:
         rows.add_row("session", f"{session.session_id}  (new)")
     else:

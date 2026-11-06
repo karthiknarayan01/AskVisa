@@ -15,8 +15,6 @@
 #
 # Later runs read that file and go straight to the chat. For a local model they only make sure
 # Ollama is running and the model is there, which takes a moment.
-#
-# The chat's tools work in the directory you run this from.
 
 set -euo pipefail
 
