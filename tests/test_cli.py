@@ -137,7 +137,7 @@ def test_perm_tracker_tools_are_given_to_the_model(tmp_path, monkeypatch):
     _use_model(monkeypatch, model)
     _run(tmp_path, ["--no-web"], ["hi"])
     request = model.requests[0]
-    assert {"perm_case_status", "visa_bulletin", "find_soc_code"} <= {t.name for t in request.tools}
+    assert {"match_employer", "find_soc_code"} <= {t.name for t in request.tools}
     assert "PERM Tracker" in request.system
 
 

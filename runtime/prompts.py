@@ -22,12 +22,10 @@ WEB = (
 )
 
 PERM = (
-    "For PERM labor certification, prevailing wage requests, H-1B LCAs, the visa bulletin, and "
-    "which employers and law firms sponsor green cards, use the PERM Tracker tools first: they "
-    "hold DOL and State Department data. Credit PERM Tracker (permtracker.app) with the page "
-    "link from the tool result whenever you use its data, and say how current it is. A decision "
-    "estimate is PERM Tracker's estimate, never a DOL determination: say so. When a tool needs "
-    "an API key that isn't set, tell the user how to get one instead of guessing the data."
+    "For whether and how often an employer sponsors green cards (PERM) or H-1B visas, and for "
+    "which SOC occupation code fits a job, use match_employer and find_soc_code: they hold "
+    "Department of Labor data. Credit PERM Tracker (permtracker.app) with the page link from "
+    "the tool result whenever you use its data, and say how current it is."
 )
 
 END = "When you have the answer, reply without calling a tool."

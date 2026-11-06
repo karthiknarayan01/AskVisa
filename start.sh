@@ -11,7 +11,6 @@
 #   2. asks which model to use: Qwen on this computer (through Ollama), Anthropic or DeepSeek
 #   3. local: installs Ollama if it's missing (after asking), starts it, downloads the model
 #      hosted: asks for the API key unless it is already in the environment
-#      then asks for a PERM Tracker API key, which can be skipped
 #   4. saves the choice to ~/.config/agent-runtime/config (readable only by you)
 #
 # Later runs read that file and go straight to the chat. For a local model they only make sure
@@ -31,7 +30,6 @@ PROVIDER=""
 MODEL=""
 ANTHROPIC_KEY=""
 DEEPSEEK_KEY=""
-PERMTRACKER_KEY=""
 
 main() {
     local setup=0 args=()
@@ -44,7 +42,6 @@ main() {
         say "Using $MODEL ($PROVIDER). Run ./start.sh --setup to change it."
     else
         choose_model
-        ask_permtracker_key
         save_config
     fi
     if [[ "$PROVIDER" == "ollama" ]]; then
@@ -105,7 +102,6 @@ load_config() {
             MODEL) MODEL="$value" ;;
             ANTHROPIC_API_KEY) ANTHROPIC_KEY="$value" ;;
             DEEPSEEK_API_KEY) DEEPSEEK_KEY="$value" ;;
-            PERMTRACKER_API_KEY) PERMTRACKER_KEY="$value" ;;
         esac
     done < "$CONFIG"
     case "$PROVIDER" in
@@ -165,19 +161,6 @@ ask_key() {
     printf -v "$target" '%s' "$key"
 }
 
-ask_permtracker_key() {
-    # Optional: without it, the PERM case, employer and visa bulletin tools ask for one.
-    if [[ -n "${PERMTRACKER_API_KEY:-}" ]]; then
-        say "Using PERMTRACKER_API_KEY from the environment."
-        return
-    fi
-    echo
-    echo "PERM, employer and visa bulletin data comes from PERM Tracker, which needs a free API key"
-    echo "(https://permtracker.app/developers, then Settings, API keys)."
-    read -r -s -p "Paste it, or press Enter to skip (input is hidden): " PERMTRACKER_KEY || PERMTRACKER_KEY=""
-    echo
-}
-
 save_config() {
     mkdir -p "$CONFIG_DIR"
     (
@@ -187,7 +170,6 @@ save_config() {
             echo "MODEL=$MODEL"
             [[ -n "$ANTHROPIC_KEY" ]] && echo "ANTHROPIC_API_KEY=$ANTHROPIC_KEY"
             [[ -n "$DEEPSEEK_KEY" ]] && echo "DEEPSEEK_API_KEY=$DEEPSEEK_KEY"
-            [[ -n "$PERMTRACKER_KEY" ]] && echo "PERMTRACKER_API_KEY=$PERMTRACKER_KEY"
             true
         } > "$CONFIG"
     )
@@ -244,7 +226,6 @@ ensure_model_downloaded() {
 launch() {
     [[ -n "$ANTHROPIC_KEY" && -z "${ANTHROPIC_API_KEY:-}" ]] && export ANTHROPIC_API_KEY="$ANTHROPIC_KEY"
     [[ -n "$DEEPSEEK_KEY" && -z "${DEEPSEEK_API_KEY:-}" ]] && export DEEPSEEK_API_KEY="$DEEPSEEK_KEY"
-    [[ -n "$PERMTRACKER_KEY" && -z "${PERMTRACKER_API_KEY:-}" ]] && export PERMTRACKER_API_KEY="$PERMTRACKER_KEY"
     exec "$VENV/bin/agent-runtime" --provider "$PROVIDER" --model "$MODEL" "$@"
 }
 
