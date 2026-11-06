@@ -21,12 +21,23 @@ WEB = (
     "enough. Prefer the most recent sources, mention dates, and list the URLs you relied on."
 )
 
+PERM = (
+    "For PERM labor certification, prevailing wage requests, H-1B LCAs, the visa bulletin, and "
+    "which employers and law firms sponsor green cards, use the PERM Tracker tools first: they "
+    "hold DOL and State Department data. Credit PERM Tracker (permtracker.app) with the page "
+    "link from the tool result whenever you use its data, and say how current it is. A decision "
+    "estimate is PERM Tracker's estimate, never a DOL determination: say so. When a tool needs "
+    "an API key that isn't set, tell the user how to get one instead of guessing the data."
+)
+
 END = "When you have the answer, reply without calling a tool."
 
 
-def system_prompt(today: date, web: bool) -> str:
-    """The prompt for a session; `web` adds the guidance for the web tools."""
+def system_prompt(today: date, web: bool, perm: bool = False) -> str:
+    """The prompt for a session; `web` and `perm` add the guidance for those tools."""
     parts = [BASE.format(today=today.strftime("%A, %B %d, %Y"))]
+    if perm:
+        parts.append(PERM)
     if web:
         parts.append(WEB)
     parts.append(END)

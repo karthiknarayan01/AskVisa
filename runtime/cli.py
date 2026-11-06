@@ -60,6 +60,7 @@ from runtime.terminal_approval import TerminalApprover
 from runtime.terminal_display import TurnDisplay, TurnStats
 from runtime.terminal_input import Interrupted, Terminal
 from runtime.tools import Tool, ToolRegistry
+from runtime.permtracker_tools import permtracker_tools
 from runtime.web_tools import web_tools
 
 DEFAULT_DB = "agent.db"
@@ -169,7 +170,7 @@ def make_chat(args: argparse.Namespace, console: Console, read, log: EventLog) -
         options={},
     )
     approver: Approver = AutoApprove() if args.yes else TerminalApprover(chat.terminal, console)
-    chat.options = {"approver": approver, "system_prompt": system_prompt(date.today(), web)}
+    chat.options = {"approver": approver, "system_prompt": system_prompt(date.today(), web, perm=True)}
     window = getattr(model, "context_window", None)
     if window is not None:
         # The model knows its own window (a local model is told its size), so compact against it.
@@ -186,8 +187,8 @@ def make_chat(args: argparse.Namespace, console: Console, read, log: EventLog) -
 
 
 def agent_tools(web: bool) -> list[Tool]:
-    """The tools the agent gets: the web tools, unless web search is turned off."""
-    return web_tools() if web else []
+    """The tools the agent gets: the PERM Tracker tools, and the web tools unless turned off."""
+    return permtracker_tools() + (web_tools() if web else [])
 
 
 def show_welcome(chat: Chat) -> None:

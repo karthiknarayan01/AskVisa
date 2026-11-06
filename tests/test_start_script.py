@@ -117,6 +117,22 @@ def test_a_key_already_in_the_environment_is_used_and_not_saved(env):
     assert "sk-env" not in config(env).read_text()
 
 
+def test_a_perm_tracker_key_is_saved_and_passed_to_the_chat(env):
+    _executable(Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-runtime",
+                '#!/bin/sh\necho "PERM ${PERMTRACKER_API_KEY:-none}"\n')
+    result = run(env, "2\nsk-test\npt_live_abc\n")
+
+    assert "PERM pt_live_abc" in result.stdout
+    assert "PERMTRACKER_API_KEY=pt_live_abc" in config(env).read_text()
+
+
+def test_the_perm_tracker_key_can_be_skipped(env):
+    result = run(env, "2\nsk-test\n\n")
+
+    assert result.returncode == 0, result.stderr
+    assert "PERMTRACKER_API_KEY" not in config(env).read_text()
+
+
 def test_setup_flag_asks_again(env):
     run(env, "1\n")
     result = run(env, "3\nds-key\n", "--setup")
