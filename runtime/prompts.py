@@ -33,16 +33,17 @@ WEB = (
     "the date of what you rely on."
 )
 
-PERM_LOOKUPS = (
-    "match_employer and find_soc_code cover an employer's record of sponsoring green cards "
-    "(PERM) and H-1B visas, and SOC occupation codes, from Department of Labor data."
+PERM = (
+    "These tools cover Department of Labor and State Department data on employment-based green "
+    "cards and H-1B visas: whether and how often an employer sponsors, and SOC occupation codes "
+    "(match_employer, find_soc_code){records}."
 )
 
 PERM_RECORDS = (
-    "perm_case_status, perm_decision_estimate and perm_queue cover a DOL case's status and "
-    "details, when a pending PERM case is likely to be decided, and current PERM processing "
-    "times and backlog. visa_bulletin covers priority date cutoffs. The employer, law firm and "
-    "occupation search and profile tools, and export_search, cover deeper DOL records."
+    "; a case's status by its DOL case number, when a pending PERM case is likely to be decided, "
+    "current PERM processing times and backlog, and visa bulletin cutoff dates "
+    "(perm_case_status, perm_decision_estimate, perm_queue, visa_bulletin); and deeper employer, "
+    "law firm and occupation records (the search and profile tools, export_search)"
 )
 
 END = "When you have the answer, reply without calling a tool."
@@ -56,9 +57,7 @@ def system_prompt(today: date, tools: Iterable[str]) -> str:
     names = set(tools)
     parts = [BASE.format(today=today.strftime("%A, %B %d, %Y"))]
     if "match_employer" in names:
-        parts.append(PERM_LOOKUPS)
-    if "perm_case_status" in names:
-        parts.append(PERM_RECORDS)
+        parts.append(PERM.format(records=PERM_RECORDS if "perm_case_status" in names else ""))
     if "web_search" in names:
         parts.append(WEB)
     parts.append(END)

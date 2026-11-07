@@ -41,3 +41,9 @@ def test_web_is_the_fallback_after_the_specialized_tools():
     prompt = system_prompt(TODAY, LOOKUPS + RECORDS + WEB)
     assert "cover everything the other tools don't" in prompt
     assert prompt.index("match_employer") < prompt.index("perm_case_status") < prompt.index("web_search")
+
+
+def test_the_dol_tools_are_one_section_of_the_prompt():
+    prompt = system_prompt(TODAY, LOOKUPS + RECORDS + WEB)
+    section = next(p for p in prompt.split("\n\n") if "match_employer" in p)
+    assert "perm_case_status" in section and "visa_bulletin" in section
