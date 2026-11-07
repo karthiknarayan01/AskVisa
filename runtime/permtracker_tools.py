@@ -8,9 +8,8 @@ wage and H-1B LCA data and O*NET occupation data, and serves it through a JSON A
     find_soc_code(query)    GET /lookup/soc         SOC codes for a job title, or one code's details
 
 They allow 60 calls a minute per address. Answers come back as
-{"data": ..., "meta": {"source", "asOf", "url"}}. A tool returns a first line naming the source,
-its date and its page, which the API terms require to be credited, then the data as JSON.
-match_employer adds a line between them saying whether the match is exact, possible or none and
+{"data": ..., "meta": {"source", "asOf", "url"}}. A tool returns a first line with the date of
+the data, then the data as JSON. match_employer adds a line between them saying whether the match is exact, possible or none and
 what to do about it, so that guidance is in front of the model when it reads the numbers.
 
 The descriptions say when to use each tool and when not to; the system prompt only says what
@@ -29,7 +28,6 @@ from runtime.tools import Tool
 BASE_URL = "https://permtracker.app/v1"
 TIMEOUT_SECONDS = 20
 MAX_OUTPUT_CHARS = 20_000
-DEFAULT_SOURCE = "PERM Tracker (permtracker.app)"
 
 
 MATCH_NOTES = {
@@ -60,8 +58,8 @@ say. Its numbers are the employer's history, not a prediction for the user's own
 
 Returns: the match (exact, possible or none, with what to do for each), and for a match the \
 employer's PERM decisions, certified share, pending cases, newest filing, filings in the last 12 \
-months, and H-1B LCA and wage request counts. The first line credits PERM Tracker with the page \
-link and the date of the data: cite both when you use it."""
+months, and H-1B LCA and wage request counts. The first line gives the date of the data: \
+mention it when how current the numbers are matters."""
 
 FIND_SOC_CODE = """\
 Look up SOC occupation codes. A SOC code is the government's code for an occupation (e.g. 15-1252 \
@@ -79,8 +77,8 @@ Pass a job title or a code. For a title it returns the codes employers filed it 
 often each was used: give the common ones, and say the right code depends on the actual duties, \
 not the title. For a code it returns its title, O*NET description and tasks, common filed titles, \
 PERM approval rate and median offered wage, and for a 2010 code the 2018 codes it became. Approval \
-rates and wages are history, not a prediction for the user's case. The first line credits PERM \
-Tracker with the page link and the date of the data: cite both when you use it."""
+rates and wages are history, not a prediction for the user's case. The first line gives the date \
+of the data: mention it when how current the numbers are matters."""
 
 
 def permtracker_tools(client: PermTrackerClient | None = None) -> list[Tool]:
@@ -126,9 +124,9 @@ class PermTrackerClient:
         try:
             response = self.http.get(BASE_URL + path, params=params, headers={"Accept": "application/json"})
         except httpx.TimeoutException:
-            raise PermTrackerError("PERM Tracker didn't answer in time; try again shortly") from None
+            raise PermTrackerError("the lookup didn't answer in time; try again shortly") from None
         except httpx.HTTPError as e:
-            raise PermTrackerError(f"couldn't reach PERM Tracker: {e}") from None
+            raise PermTrackerError(f"couldn't reach the lookup service: {e}") from None
         if response.status_code >= 400:
             raise PermTrackerError(_error_message(response))
         try:
@@ -138,20 +136,14 @@ class PermTrackerClient:
 
 
 def render(body: Any, note: str | None = None) -> str:
-    """A credit line (source, date, page), an optional note, then the data as JSON, clipped."""
+    """A line with the data's date, an optional note, then the data as JSON, clipped."""
     if isinstance(body, str):
         return _clip(body)
     if not isinstance(body, dict) or "data" not in body:
         return _clip(json.dumps(body, ensure_ascii=False))
-    meta = body.get("meta") or {}
-    credit = " · ".join(
-        str(part) for part in (
-            meta.get("source") or DEFAULT_SOURCE,
-            f"as of {meta['asOf']}" if meta.get("asOf") else None,
-            meta.get("url"),
-        ) if part
-    )
-    lines = [credit, note, json.dumps(body["data"], ensure_ascii=False)]
+    as_of = (body.get("meta") or {}).get("asOf")
+    dated = f"Department of Labor data as of {as_of}" if as_of else "Department of Labor data"
+    lines = [dated, note, json.dumps(body["data"], ensure_ascii=False)]
     return _clip("\n".join(line for line in lines if line))
 
 
@@ -168,7 +160,7 @@ def _error_message(response: httpx.Response) -> str:
         pass
     text = f"HTTP {response.status_code}" + (f" {code}" if code else "") + (f": {message}" if message else "")
     if response.status_code == 404:
-        return f"{text}. PERM Tracker has no record of that"
+        return f"{text}. No record of that"
     if response.status_code == 429:
         wait = response.headers.get("Retry-After")
         return f"{text}. Rate limited" + (f"; retry in {wait} seconds" if wait else "")

@@ -138,7 +138,7 @@ def test_perm_tracker_tools_are_given_to_the_model(tmp_path, monkeypatch):
     _run(tmp_path, ["--no-web"], ["hi"])
     request = model.requests[0]
     assert {"match_employer", "find_soc_code"} <= {t.name for t in request.tools}
-    assert "PERM Tracker" in request.system
+    assert "match_employer" in request.system
 
 
 def test_no_web_flag_removes_the_web_tools(tmp_path, monkeypatch):

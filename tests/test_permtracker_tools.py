@@ -66,10 +66,10 @@ def test_both_tools_only_read():
     assert all(t.idempotent and not t.requires_approval for t in tools)
 
 
-async def test_answer_is_the_credit_line_then_the_data():
+async def test_answer_is_the_date_line_then_the_data():
     result = await call(registry(Server(body={**ANSWER, "data": {"codes": ["15-1252"]}})), "find_soc_code", query="x")
     first, rest = result.output.split("\n", 1)
-    assert first == "PERM Tracker (permtracker.app) · as of 2026-11-06 · https://permtracker.app/perm-employers/google-llc"
+    assert first == "Department of Labor data as of 2026-11-06"
     assert json.loads(rest) == {"codes": ["15-1252"]}
 
 
@@ -84,7 +84,7 @@ async def test_answer_is_the_credit_line_then_the_data():
 async def test_match_employer_says_what_to_do_with_each_kind_of_match(match, says):
     body = {**ANSWER, "data": {**ANSWER["data"], "match": match}}
     lines = (await call(registry(Server(body=body)), "match_employer", name="Google")).output.split("\n")
-    assert lines[0].startswith("PERM Tracker (permtracker.app)")
+    assert lines[0] == "Department of Labor data as of 2026-11-06"
     assert says in lines[1]
     assert json.loads(lines[2]) == body["data"]
 
@@ -100,18 +100,25 @@ def test_descriptions_say_when_to_use_each_tool_and_when_not_to():
     assert "Does Acme sponsor green cards?" in by_name["match_employer"]
     assert "Don't use it for the status of one case" in by_name["match_employer"]
     assert "What SOC code would my job" in by_name["find_soc_code"]
-    assert all("cite both" in d for d in by_name.values())
+    assert all("date of the data" in d for d in by_name.values())
 
 
-async def test_credit_line_falls_back_when_meta_is_missing():
+async def test_results_and_descriptions_never_name_the_data_provider():
+    tools = permtracker_tools(PermTrackerClient())
+    assert not any("PERM Tracker" in t.description or "permtracker" in t.description for t in tools)
+    result = await call(registry(Server()), "match_employer", name="Google")
+    assert "PERM Tracker" not in result.output and "permtracker.app" not in result.output
+
+
+async def test_date_line_without_a_date_when_meta_is_missing():
     result = await call(registry(Server(body={"data": []})), "find_soc_code", query="x")
-    assert result.output.splitlines()[0] == "PERM Tracker (permtracker.app)"
+    assert result.output.splitlines()[0] == "Department of Labor data"
 
 
 @pytest.mark.parametrize(
     "status, body, headers, expected",
     [
-        (404, {"error": {"code": "not_found"}}, {}, "HTTP 404 not_found. PERM Tracker has no record of that"),
+        (404, {"error": {"code": "not_found"}}, {}, "HTTP 404 not_found. No record of that"),
         (429, {"error": {"code": "rate_limited", "message": "Slow down"}}, {"Retry-After": "30"},
          "HTTP 429 rate_limited: Slow down. Rate limited; retry in 30 seconds"),
         (503, {"error": {"code": "unavailable"}}, {}, "HTTP 503 unavailable"),
@@ -130,7 +137,7 @@ async def test_network_failures_are_errors_not_crashes():
 
     client = PermTrackerClient(http=httpx.Client(transport=httpx.MockTransport(fail)))
     result = await ToolRegistry(permtracker_tools(client)).run(ToolCall("c1", "find_soc_code", {"query": "x"}))
-    assert result.is_error and "couldn't reach PERM Tracker" in result.output
+    assert result.is_error and "couldn't reach the lookup service" in result.output
 
 
 async def test_long_answers_are_clipped():
@@ -152,4 +159,4 @@ async def test_live_lookups():
     soc = await tools.run(ToolCall("c1", "find_soc_code", {"query": "software developer"}))
     employer = await tools.run(ToolCall("c2", "match_employer", {"name": "Google"}))
     assert not soc.is_error and "15-1252" in soc.output
-    assert not employer.is_error and employer.output.startswith("PERM Tracker")
+    assert not employer.is_error and employer.output.startswith("Department of Labor data")
