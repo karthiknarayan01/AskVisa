@@ -1,0 +1,118 @@
+# Evals for advice questions: "what should I do" and "how do my options compare". Does the model
+# follow the advice method in the system prompt: ask for the facts that change the answer, list
+# the realistic options, look up what each depends on, compare them on the same points, give next
+# steps, and leave the choice to the user? The judge items name the options and facts a good
+# answer covers. Calculators run for real; the visa bulletin is a fixture.
+
+[suite]
+name = "reasoning"
+today = "2026-11-07"
+tools = ["perm", "perm_keyed", "regulations", "federal_register", "calculators", "web"]
+
+[defaults.web_search]
+output = "No results."
+
+[defaults.read_web_page]
+output = "(the page has no text)"
+
+[defaults.search_regulations]
+output = "8 CFR, current through 2026-11-05: no matching sections"
+
+[defaults.search_federal_register]
+output = "No Federal Register documents match."
+
+[defaults.visa_bulletin]
+output = '''Department of Labor data as of 2026-11-01
+{"month": "2026-11", "employment": {"finalAction": {"EB1": {"all": "C", "china": "2023-01-01", "india": "2022-02-01"}, "EB2": {"all": "2024-04-01", "china": "2021-01-01", "india": "2013-01-01"}, "EB3": {"all": "2023-09-01", "china": "2021-03-01", "india": "2013-06-15"}}, "datesForFiling": {"EB1": {"all": "C", "china": "2023-06-01", "india": "2022-08-01"}, "EB2": {"all": "2024-10-01", "china": "2021-07-01", "india": "2013-07-15"}, "EB3": {"all": "2024-01-01", "china": "2021-09-01", "india": "2014-01-01"}}}}'''
+
+
+# --- asking for the facts that change the answer -----------------------------------------
+
+[[case]]
+id = "eb2-or-eb3-asks-for-facts"
+question = "Should I file for EB-2 or EB-3?"
+judge = [
+    "Asks for the user's country of birth (or chargeability), since the waits differ by country",
+    "Asks about the user's degree or experience, or what the job requires, since EB-2 needs an advanced degree or exceptional ability",
+    "Does not recommend one category before knowing these facts",
+]
+
+[[case]]
+id = "h1b-or-o1-asks-about-background"
+split = "held_out"
+question = "Which is better for me, an H-1B or an O-1?"
+judge = [
+    "Explains the main difference: the H-1B needs a specialty occupation and (for most employers) the lottery, while the O-1 needs extraordinary ability evidence and has no cap",
+    "Asks about the user's background, achievements or situation before saying which might fit",
+    "Does not pick one for the user",
+]
+
+
+# --- comparing options with looked-up facts ----------------------------------------------
+
+[[case]]
+id = "eb2-or-eb3-india-compared"
+question = "I was born in India and have a master's in computer science. My employer is starting my green card. Should we file EB-2 or EB-3?"
+must_call = ["visa_bulletin"]
+judge = [
+    "Compares the current India final action dates for EB-2 (January 1, 2013) and EB-3 (June 15, 2013) from the bulletin",
+    "Explains that EB-2 needs the job itself to require an advanced degree (or a bachelor's plus five years), not just the user to have one",
+    "Mentions that the category can be changed later (filing a second I-140 while keeping the priority date) or that both can be pursued",
+    "Lays out the trade-offs without choosing for the user, and gives a next step",
+]
+
+[[case]]
+id = "h1b-layoff-options"
+question = "I'm on H-1B and just got laid off. My last day was October 20, 2026, and my I-94 is valid until August 31, 2027. What are my options?"
+must_call = ["grace_period_end"]
+judge = [
+    "Says the grace period ends on December 18, 2026",
+    "Lists at least three realistic options from: a new employer filing an H-1B transfer, changing to B-2 visitor status, changing to a dependent status, a cap-exempt employer, an O-1, or leaving the US",
+    "Compares the options on timing, cost or risk (for example that a transfer must be filed before the grace period ends)",
+    "Gives a concrete next step and does not choose for the user",
+]
+[case.args.grace_period_end]
+status = "H-1B"
+end_date = "2026-10-20"
+
+[[case]]
+id = "opt-ending-not-selected"
+split = "held_out"
+question = "My STEM OPT ends on March 31, 2027, and I wasn't selected in the H-1B lottery. What can I do?"
+judge = [
+    "Says there is a 60-day grace period after OPT ends (until about May 29, 2027)",
+    "Lists at least three options from: registering in the next H-1B lottery, a cap-exempt employer, an O-1, a new degree program on F-1, an L-1 after a year with the employer abroad, or leaving the US",
+    "Points out the timing problem: a selection in the next lottery wouldn't let them start H-1B work until October 1, and cap-gap only extends their permission to work if their OPT is still valid when the H-1B petition is filed",
+    "Does not choose for the user",
+]
+
+[[case]]
+id = "port-job-during-i485"
+question = "My I-485 has been pending for 200 days and I got a better job offer. Can I switch jobs without losing my green card process?"
+judge = [
+    "Says that because the I-485 has been pending 180 days or more, the user can generally move to a new job in the same or a similar occupation (INA 204(j), AC21 portability)",
+    "Mentions Form I-485 Supplement J for the new job offer",
+    "Names what to check before switching, such as whether the I-140 is approved and whether the new job is truly same or similar, without choosing for the user",
+]
+
+[[case]]
+id = "citizenship-vs-long-trip"
+split = "held_out"
+question = "I can file for citizenship in about 3 months, but I've been offered a 7-month assignment abroad. What should I think about?"
+judge = [
+    "Explains that a trip abroad of more than 6 months is presumed to break continuous residence for naturalization",
+    "Compares filing before leaving with going and filing later, including that the residence clock can be affected",
+    "Mentions a way to keep continuous residence or rebut the presumption (for example evidence of ties, or Form N-470 for certain employers), or suggests asking an attorney",
+    "Does not choose for the user",
+]
+
+
+# --- the method's limits -----------------------------------------------------------------
+
+[[case]]
+id = "no-opinion-on-policy-in-advice"
+question = "Should I move to Canada instead? Is the US system worse?"
+judge = [
+    "Declines to judge whether the US system is better or worse",
+    "Says it can only help with US immigration and offers to compare the user's US options if they share their situation",
+]

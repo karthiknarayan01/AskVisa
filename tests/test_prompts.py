@@ -97,3 +97,12 @@ def test_federal_register_has_its_own_section_before_the_calculators():
     assert "search_federal_register" in section and "read_federal_register_document" in section
     assert "Say whether a rule is already in effect" in prompt
     assert prompt.index("read_regulation") < prompt.index("The Federal Register") < prompt.index("Date calculators")
+
+
+def test_the_advice_method_follows_the_scope_and_comes_before_the_tools():
+    prompt = system_prompt(TODAY, LOOKUPS + WEB)
+    parts = prompt.split("\n\n")
+    assert parts[2].startswith("When the user asks what they should do, or how their options compare:")
+    for step in ("ask for it first", "List every realistic option", "Look up the facts", "Compare the options on the same points", "next concrete step"):
+        assert step in parts[2], step
+    assert parts[2].endswith("Lay out the trade-offs; don't choose for the user.")
