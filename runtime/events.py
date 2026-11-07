@@ -6,13 +6,16 @@ BEFORE the runtime acts on it. Nothing is ever updated or deleted, and all other
 is rebuilt by replaying a session's events. If `append()` returned, the event is on disk,
 so a restarted process sees exactly what the dead one saw.
 
-Tables (created by runtime/migrations/0001_create_sessions_and_events.sql):
+Tables (created by runtime/migrations/0001_create_sessions_and_events.sql, with request_id
+added by 0002_add_request_id_to_events.sql):
 
     sessions(session_id PK, created_at)
-    events(seq INTEGER PK, session_id FK, type, payload JSON, ts)
+    events(seq INTEGER PK, session_id FK, type, payload JSON, ts, request_id)
 
 `seq` is assigned by SQLite on insert and only ever increases, so ordering a session's
-events by seq gives the order they were appended in.
+events by seq gives the order they were appended in. It is a 64-bit integer, so it can't run
+out in practice. `request_id` groups the events of one user request (a turn): its user
+message, every model step and tool call, and how it ended. load_request() reads one request.
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ class Event:
     type: str
     payload: dict[str, Any]
     ts: str
+    request_id: str | None = None  # the user request (turn) the event belongs to
 
 
 @dataclass(frozen=True)
@@ -97,7 +101,9 @@ class EventLog:
         )
         return session_id
 
-    def append(self, session_id: str, type: str, payload: dict[str, Any]) -> Event:
+    def append(
+        self, session_id: str, type: str, payload: dict[str, Any], request_id: str | None = None
+    ) -> Event:
         """Write one event and return it. The event is durable when this returns.
 
         One INSERT in autocommit mode is atomic and committed (and fsynced) before
@@ -107,12 +113,12 @@ class EventLog:
         ts = _now()
         try:
             cursor = self._conn.execute(
-                "INSERT INTO events (session_id, type, payload, ts) VALUES (?, ?, ?, ?)",
-                (session_id, type, body, ts),
+                "INSERT INTO events (session_id, type, payload, ts, request_id) VALUES (?, ?, ?, ?, ?)",
+                (session_id, type, body, ts, request_id),
             )
         except sqlite3.IntegrityError as e:
             raise UnknownSession(session_id) from e
-        return Event(session_id, cursor.lastrowid, type, payload, ts)
+        return Event(session_id, cursor.lastrowid, type, payload, ts, request_id)
 
     def load(self, session_id: str, after_seq: int = 0) -> list[Event]:
         """Return a session's events in seq order, optionally only those after `after_seq`.
@@ -121,13 +127,23 @@ class EventLog:
         only consulted when no events come back, to tell "empty" apart from "unknown".
         """
         rows = self._conn.execute(
-            "SELECT seq, type, payload, ts FROM events "
+            "SELECT seq, type, payload, ts, request_id FROM events "
             "WHERE session_id = ? AND seq > ? ORDER BY seq",
             (session_id, after_seq),
         ).fetchall()
         if not rows and not self.has_session(session_id):
             raise UnknownSession(session_id)
-        return [Event(session_id, seq, t, json.loads(p), ts) for seq, t, p, ts in rows]
+        return [Event(session_id, seq, t, json.loads(p), ts, rid) for seq, t, p, ts, rid in rows]
+
+    def load_request(self, session_id: str, request_id: str) -> list[Event]:
+        """One request's events, in seq order: its user message, every step and tool call, and
+        how it ended. Empty if the session has no such request."""
+        rows = self._conn.execute(
+            "SELECT seq, type, payload, ts FROM events "
+            "WHERE session_id = ? AND request_id = ? ORDER BY seq",
+            (session_id, request_id),
+        ).fetchall()
+        return [Event(session_id, seq, t, json.loads(p), ts, request_id) for seq, t, p, ts in rows]
 
     def has_session(self, session_id: str) -> bool:
         """True if `new_session` created this id."""

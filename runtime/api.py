@@ -65,7 +65,8 @@ def create_app(agent: Agent, log: EventLog, allow_origins: list[str] | None = No
     @app.get("/api/sessions/{session_id}")
     async def get_session(session_id: str) -> dict:
         session = _session(turns, session_id)
-        items = conversation(session.state)
+        request_ids = [e.request_id for e in log.load(session_id) if e.type == "user_message"]
+        items = conversation(session.state, request_ids)
         title = next((i["text"] for i in items if i["type"] == "user_message"), "")
         return {
             "id": session_id,

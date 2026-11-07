@@ -2,7 +2,7 @@
 
 Each event is `event: <type>` and `data: <json>`, in the order things happen:
 
-    user_message       {"text"}                                  the turn's question, as recorded
+    user_message       {"text", "request_id"}                    the turn's question, and the turn's id
     reasoning          {"delta"}                                 a piece of the model's thinking
     text               {"delta"}                                 a piece of the answer
     assistant_message  {"text", "reasoning", "tool_calls", "usage"}  the complete reply of one step
@@ -11,7 +11,7 @@ Each event is `event: <type>` and `data: <json>`, in the order things happen:
     tool_skipped       {"id", "name", "reason"}
     compaction         {"replaced_count"}                        older messages were summarized
     turn_stopped       {"reason"}                                cancelled, max_steps, truncated, denied
-    end                {"outcome", "text"?, "message"?}          always last
+    end                {"outcome", "request_id", "text"?, "message"?}  always last
 
 `text` and `reasoning` deltas are the reply while it streams; `assistant_message` follows with
 the whole of it. A step that calls tools has an assistant_message with tool_calls and usually no
@@ -52,7 +52,7 @@ def to_wire(item: Event | StreamDelta, state: SessionState) -> tuple[str, dict[s
         return ("reasoning" if item.kind == "reasoning" else "text"), {"delta": item.text}
     payload = item.payload
     if item.type == "user_message":
-        return "user_message", {"text": payload["text"]}
+        return "user_message", {"text": payload["text"], "request_id": item.request_id}
     if item.type == "assistant_message":
         return "assistant_message", {
             "text": payload.get("text", ""),
@@ -88,28 +88,40 @@ def tool_result(call_id: str, name: str, output: str, is_error: bool) -> dict[st
     }
 
 
-def conversation(state: SessionState) -> list[dict[str, Any]]:
-    """A stored conversation as the same items a live turn streams, without the deltas."""
-    items: list[dict[str, Any]] = []
+def conversation(state: SessionState, request_ids: list[str | None] | None = None) -> list[dict[str, Any]]:
+    """A stored conversation as the same items a live turn streams, without the deltas.
+
+    `request_ids` are the session's turn ids in order (from its user_message events). Each item
+    gets the id of the turn it belongs to. After a compaction the earliest turns are summarized
+    away, so the ids are matched to the user messages still present from the end.
+    """
+    users = sum(1 for m in state.messages if m.role == "user" and not m.text.startswith(SUMMARY_HEADER))
+    ids = iter((request_ids or [])[-users:] if users else [])
     names = {c.id: c.name for m in state.messages for c in m.tool_calls}
     arguments = {c.id: c.arguments for m in state.messages for c in m.tool_calls}
+    current: str | None = None
+    items: list[dict[str, Any]] = []
     for message in state.messages:
         if message.role == "user" and message.text.startswith(SUMMARY_HEADER):
-            items.append({"type": "compaction", "summary": message.text})
-        elif message.role == "user":
-            items.append({"type": "user_message", "text": message.text})
+            items.append({"type": "compaction", "summary": message.text, "request_id": None})
+            continue
+        if message.role == "user":
+            current = next(ids, None)
+            item: dict[str, Any] = {"type": "user_message", "text": message.text}
         elif message.role == "assistant":
-            items.append({
+            item = {
                 "type": "assistant_message",
                 "text": message.text,
                 "reasoning": message.reasoning,
                 "tool_calls": [{"id": c.id, "name": c.name, "arguments": c.arguments} for c in message.tool_calls],
-            })
+            }
         else:
             call_id = message.tool_call_id or ""
-            items.append({
+            item = {
                 "type": "tool_finished",
                 **tool_result(call_id, names.get(call_id, ""), message.text, message.is_error),
                 "arguments": arguments.get(call_id, {}),
-            })
+            }
+        item["request_id"] = current
+        items.append(item)
     return items
