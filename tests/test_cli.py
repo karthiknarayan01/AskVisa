@@ -132,6 +132,26 @@ def test_web_tools_and_a_dated_prompt_are_given_to_the_model(tmp_path, monkeypat
     assert "Today's date is" in request.system and "web_search" in request.system
 
 
+def test_without_a_service_key_only_the_keyless_perm_tools_are_given(tmp_path, monkeypatch):
+    monkeypatch.delenv("PERMTRACKER_API_KEY", raising=False)
+    model = FakeModel([say("ok")])
+    _use_model(monkeypatch, model)
+    _run(tmp_path, ["--no-web"], ["hi"])
+    request = model.requests[0]
+    assert {t.name for t in request.tools} == {"match_employer", "find_soc_code", "immigration_data_page"}
+    assert "match_employer" in request.system and "perm_case_status" not in request.system
+
+
+def test_with_a_service_key_every_perm_tool_is_given(tmp_path, monkeypatch):
+    monkeypatch.setenv("PERMTRACKER_API_KEY", "pt_test_key")
+    model = FakeModel([say("ok")])
+    _use_model(monkeypatch, model)
+    _run(tmp_path, ["--no-web"], ["hi"])
+    request = model.requests[0]
+    assert {"perm_case_status", "visa_bulletin", "export_search"} <= {t.name for t in request.tools}
+    assert "perm_case_status" in request.system
+
+
 def test_no_web_flag_removes_the_web_tools(tmp_path, monkeypatch):
     model = FakeModel([say("ok")])
     _use_model(monkeypatch, model)

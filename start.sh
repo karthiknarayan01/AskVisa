@@ -13,6 +13,9 @@
 #      hosted: asks for the API key unless it is already in the environment
 #   4. saves the choice to ~/.config/agent-runtime/config (readable only by you)
 #
+# Service keys the tools use (PERMTRACKER_API_KEY) are read from a .env file next to this script
+# when it exists, as KEY=value lines; it is git-ignored and never asked for.
+#
 # Later runs read that file and go straight to the chat. For a local model they only make sure
 # Ollama is running and the model is there, which takes a moment.
 
@@ -38,6 +41,7 @@ main() {
     done
 
     install_package
+    load_env_file
     if [[ $setup -eq 0 ]] && load_config; then
         say "Using $MODEL ($PROVIDER). Run ./start.sh --setup to change it."
     else
@@ -91,6 +95,21 @@ find_python() {
 }
 
 # --- 2. the model choice and the saved config --------------------------------------------
+
+load_env_file() {
+    # Export the service keys from .env, parsed as KEY=value lines, never executed. A key
+    # already set in the environment wins.
+    local file="${AGENT_RUNTIME_ENV_FILE:-$ROOT/.env}" key value
+    [[ -f "$file" ]] || return 0
+    while IFS='=' read -r key value || [[ -n "$key" ]]; do
+        key="${key#export }"
+        value="${value%$'\r'}"
+        value="${value#\"}"; value="${value%\"}"
+        case "$key" in
+            PERMTRACKER_API_KEY) [[ -n "${!key:-}" || -z "$value" ]] || export "$key=$value" ;;
+        esac
+    done < "$file"
+}
 
 load_config() {
     # Read the saved choice. The file is parsed as KEY=value lines, never executed.

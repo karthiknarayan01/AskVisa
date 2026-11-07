@@ -41,9 +41,12 @@ def web_tools(client: Any = None) -> list[Tool]:
         Tool(
             name="web_search",
             description=(
-                "Search the web. Use it for current events, news, recent releases, prices and "
-                "anything that may have changed recently. Returns titles, URLs, publication dates "
-                "and sources for news, and a snippet of each result."
+                "Search the web. The general-purpose lookup: use it for any immigration question "
+                "the other tools don't cover (policy changes, forms and fees, processing, news), "
+                "when a tool returned nothing useful, or to check what a tool returned. Add "
+                "site:uscis.gov, site:travel.state.gov or similar to the query to stay on official "
+                "sources. Use topic 'news' and a time_range for recent changes. Returns titles, "
+                "URLs, dates and sources for news, and a snippet of each result."
             ),
             input_schema={
                 "type": "object",
