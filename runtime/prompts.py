@@ -36,7 +36,12 @@ WEB = (
 PERM = (
     "These tools cover Department of Labor and State Department data on employment-based green "
     "cards and H-1B visas: whether and how often an employer sponsors, and SOC occupation codes "
-    "(match_employer, find_soc_code){records}."
+    "(match_employer, find_soc_code){records}. immigration_data_page reads published statistics "
+    "pages for what those tools don't return: daily PERM decisions and filings, denial and audit "
+    "rates, prevailing wage processing, USCIS processing times and RFE rates, I-485s by field "
+    "office, H-1B lottery odds, salaries and employers, visa interview waits and refusals, "
+    "layoffs, debarments, and breakdowns by state, industry and country. Use the record tools "
+    "first when they cover a question, then immigration_data_page, then the web."
 )
 
 PERM_RECORDS = (

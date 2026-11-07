@@ -21,6 +21,11 @@ Only when PERMTRACKER_API_KEY is set, so the model never sees a tool that can on
     occupation_profile(slug)             GET /occupations/{slug}
     export_search(kind, ...)             GET /exports/{kind}
 
+Always available too: immigration_data_page(topic), which reads one of the site's statistics
+pages (daily PERM decisions, denial rates, USCIS processing times, H-1B lottery odds, visa
+interview waits, ...) for data the API doesn't serve. It returns the page's text, read with the
+same reader as read_web_page, so a page redesign can change what it gets.
+
 Not tools: /me (the key's own usage), and /webhooks and /watches (they deliver events to an
 https endpoint the user runs). The key is sent as a Bearer token; free keys allow 10 calls a
 minute and 300 a day, the lookups 60 a minute.
@@ -38,6 +43,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
@@ -45,7 +51,8 @@ import httpx
 
 from runtime.tools import Tool
 
-BASE_URL = "https://permtracker.app/v1"
+SITE_URL = "https://permtracker.app"
+BASE_URL = f"{SITE_URL}/v1"
 API_KEY_ENV = "PERMTRACKER_API_KEY"
 EXPORT_KINDS = ["cases", "employers", "law-firms", "occupations"]
 TIMEOUT_SECONDS = 20
@@ -203,9 +210,72 @@ employer, firm or occupation, the search and profile tools are cheaper. Long res
 narrow the filters rather than asking for everything."""
 
 
-def permtracker_tools(client: PermTrackerClient | None = None) -> list[Tool]:
-    """The keyless tools, plus the keyed ones when the client has an API key."""
+# topic -> (path, what the page shows). Only pages with data; the site's calculators run in the
+# browser, so their pages have no answers to read.
+PAGES: dict[str, tuple[str, str]] = {
+    "today": ("/today", "where every step of the green card process stands right now, on one page"),
+    "perm_daily_decisions": ("/perm-decision-activity", "how many PERM cases DOL decided each day, certified and denied"),
+    "perm_filings_by_day": ("/filings-by-day", "how many PERM cases were filed each day"),
+    "perm_processing_times": ("/perm-processing-times", "DOL's PERM processing times and their trend"),
+    "perm_denial_rates": ("/perm-denial-risk", "PERM denial rates and what drives them"),
+    "perm_rfi_audits": ("/perm-rfi-audit", "how often PERM cases get a request for information or an audit"),
+    "perm_layoff_disclosures": ("/perm-layoff-disclosures", "layoffs employers reported on PERM filings"),
+    "perm_case_statuses": ("/perm-case-statuses", "what each PERM case status means"),
+    "prevailing_wage_requests": ("/pwd-cases", "prevailing wage request (PWD) processing and recent determinations"),
+    "uscis_processing_times": ("/uscis-processing-times", "USCIS processing times by form, e.g. I-140, I-485, I-765"),
+    "uscis_rfe_rates": ("/uscis-rfe-rates", "how often USCIS issues requests for evidence, by form"),
+    "i140_awaiting_visa": ("/i140-awaiting-visa", "approved I-140s waiting for a visa number, by category and country"),
+    "i485_by_field_office": ("/i485-by-field-office", "pending I-485 cases and processing by USCIS field office"),
+    "nvc_waiting_list": ("/nvc-waiting-list", "the National Visa Center waiting list for immigrant visas"),
+    "visa_issuances": ("/visa-issuances", "immigrant and nonimmigrant visas issued, by category and country"),
+    "green_card_timelines": ("/green-card-timelines", "green card timelines reported by applicants, step by step"),
+    "perm_by_state": ("/perm-by-state", "PERM filings and outcomes by worksite state"),
+    "perm_by_city": ("/perm-cities", "PERM filings and outcomes by city"),
+    "perm_by_industry": ("/perm-industries", "PERM filings and outcomes by industry"),
+    "perm_by_country": ("/perm-countries", "PERM filings and outcomes by the worker's country of citizenship"),
+    "perm_wages": ("/perm-wages", "wages offered in PERM cases, by job"),
+    "h1b_wages": ("/lca-wages", "H-1B salaries from LCAs, by job and employer"),
+    "h1b_employers": ("/h1b-employers", "the employers filing the most H-1B LCAs"),
+    "h1b_cap_exempt_employers": ("/h1b-cap-exempt-employers", "H-1B cap-exempt employers (universities, nonprofits, research)"),
+    "h1b_lottery_odds": ("/h1b-lottery-odds", "H-1B lottery registrations, selections and the odds of being picked"),
+    "opt_employers": ("/opt-employers", "employers of students on OPT and CPT"),
+    "visa_wait_times": ("/visa-wait-times", "visa interview appointment waits at US consulates"),
+    "visa_refusals": ("/visa-refusals", "why visas are refused, and refusal rates"),
+    "layoff_notices": ("/layoffs", "layoff notices (WARN) from sponsoring employers"),
+    "debarments": ("/debarments", "employers debarred from sponsoring"),
+    "wage_violations": ("/wage-violations", "employers found in violation of visa wage rules"),
+    "employers_under_review": ("/perm-employers/under-review", "employers whose PERM cases are under extra DOL review"),
+    "law_firm_rankings": ("/law-firm-rankings", "law firms ranked by PERM filings"),
+    "policy_changes": ("/policy-changes", "recent immigration policy changes and their effective dates"),
+}
+
+IMMIGRATION_DATA_PAGE = """\
+Read a published statistics page on US employment-based immigration, for data the other DOL tools \
+don't return. Pick the page by topic:
+
+{topics}
+
+Use it when a question needs one of these and no other tool answers it: for example "how many \
+PERM cases were approved yesterday?" (perm_daily_decisions), "what are the odds in the H-1B \
+lottery?" (h1b_lottery_odds), "how long is USCIS taking on I-485s?" (uscis_processing_times), \
+"how long is the visa interview wait in Mumbai?" (visa_wait_times). Use perm_case_status, \
+perm_queue, visa_bulletin and the other DOL tools first when they cover the question: they return \
+exact records, while this returns the text of a web page. Use it before searching the web.
+
+Returns the page's text (tables become text), up to 20,000 characters. Read the numbers from it \
+carefully, and say what date the page gives for its data. If the page doesn't hold the answer, \
+say so or try web_search."""
+
+
+def permtracker_tools(
+    client: PermTrackerClient | None = None, read_page: Callable[[str], str] | None = None
+) -> list[Tool]:
+    """The keyless tools and the page reader, plus the keyed tools when the client has a key.
+
+    `read_page(url)` returns a page's text; it defaults to read_web_page's reader.
+    """
     client = client or PermTrackerClient()
+    read_page = read_page or _default_page_reader()
     tools = [
         _tool(
             "match_employer",
@@ -222,9 +292,26 @@ def permtracker_tools(client: PermTrackerClient | None = None) -> list[Tool]:
             lambda query: render(client.get("/lookup/soc", {"q": query})),
         ),
     ]
+    tools.append(
+        _tool(
+            "immigration_data_page",
+            IMMIGRATION_DATA_PAGE.format(
+                topics="\n".join(f"- {topic}: {about}" for topic, (_, about) in PAGES.items())
+            ),
+            {"topic": {"type": "string", "enum": list(PAGES), "description": "Which page to read"}},
+            ["topic"],
+            lambda topic: data_page(read_page, topic),
+        )
+    )
     if client.api_key:
         tools += keyed_tools(client)
     return tools
+
+
+def data_page(read_page: Callable[[str], str], topic: str) -> str:
+    """The text of the page for `topic`, under a line naming what it shows."""
+    path, about = PAGES[topic]
+    return f"Page: {about}\n\n{read_page(SITE_URL + path)}"
 
 
 def keyed_tools(client: PermTrackerClient) -> list[Tool]:
@@ -362,6 +449,16 @@ def _error_message(response: httpx.Response) -> str:
         wait = response.headers.get("Retry-After")
         return f"{text}. Rate limited" + (f"; retry in {wait} seconds" if wait else "")
     return text
+
+
+def _default_page_reader() -> Callable[[str], str]:
+    """read_web_page's reader, imported here so tests can pass their own without ddgs."""
+    from ddgs import DDGS
+
+    from runtime.web_tools import TIMEOUT_SECONDS as WEB_TIMEOUT, read_web_page
+
+    search = DDGS(timeout=WEB_TIMEOUT)
+    return lambda url: read_web_page(search, url)
 
 
 def _export_params(filters: dict[str, Any]) -> dict[str, Any]:

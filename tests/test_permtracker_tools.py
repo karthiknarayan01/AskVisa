@@ -31,9 +31,9 @@ class Server:
         return httpx.Response(self.status, json=self.body, headers=self.headers)
 
 
-def registry(server, api_key=""):
+def registry(server, api_key="", read_page=None):
     client = PermTrackerClient(api_key=api_key, http=httpx.Client(transport=httpx.MockTransport(server)))
-    return ToolRegistry(permtracker_tools(client))
+    return ToolRegistry(permtracker_tools(client, read_page or (lambda url: f"text of {url}")))
 
 
 async def call(tools, tool, **arguments):
@@ -60,6 +60,8 @@ async def test_each_tool_calls_its_endpoint_without_a_key(tool, arguments, path,
     assert "Authorization" not in request.headers
 
 
+NO_PAGES = lambda url: ""  # noqa: E731
+
 KEYED = [
     "perm_case_status", "perm_decision_estimate", "perm_queue", "visa_bulletin",
     "search_employers", "employer_profile", "search_law_firms", "law_firm_profile",
@@ -68,13 +70,13 @@ KEYED = [
 
 
 def test_without_a_key_only_the_keyless_tools_are_offered():
-    tools = permtracker_tools(PermTrackerClient(api_key=""))
-    assert [t.name for t in tools] == ["match_employer", "find_soc_code"]
+    tools = permtracker_tools(PermTrackerClient(api_key=""), NO_PAGES)
+    assert [t.name for t in tools] == ["match_employer", "find_soc_code", "immigration_data_page"]
 
 
 def test_with_a_key_every_read_endpoint_is_a_tool_and_none_needs_approval():
-    tools = permtracker_tools(PermTrackerClient(api_key="pt_test_key"))
-    assert [t.name for t in tools] == ["match_employer", "find_soc_code", *KEYED]
+    tools = permtracker_tools(PermTrackerClient(api_key="pt_test_key"), NO_PAGES)
+    assert [t.name for t in tools] == ["match_employer", "find_soc_code", "immigration_data_page", *KEYED]
     assert all(t.idempotent and not t.requires_approval for t in tools)
 
 
@@ -162,7 +164,7 @@ async def test_an_unknown_match_value_adds_no_note():
 
 
 def test_descriptions_say_when_to_use_each_tool_and_when_not_to():
-    by_name = {t.name: t.description for t in permtracker_tools(PermTrackerClient(api_key="k"))}
+    by_name = {t.name: t.description for t in permtracker_tools(PermTrackerClient(api_key="k"), NO_PAGES)}
     assert all("Use it" in d for d in by_name.values())
     assert "USCIS receipt numbers" in by_name["perm_case_status"]
     assert "not a DOL prediction" in by_name["perm_decision_estimate"]
@@ -171,10 +173,11 @@ def test_descriptions_say_when_to_use_each_tool_and_when_not_to():
     assert "Don't use it for the status of one case" in by_name["match_employer"]
     assert "What SOC code would my job" in by_name["find_soc_code"]
     assert all("date of the data" in by_name[n] for n in ("match_employer", "find_soc_code"))
+    assert "before searching the web" in by_name["immigration_data_page"]
 
 
 async def test_results_and_descriptions_never_name_the_data_provider():
-    tools = permtracker_tools(PermTrackerClient(api_key="k"))
+    tools = permtracker_tools(PermTrackerClient(api_key="k"), NO_PAGES)
     assert not any("PERM Tracker" in t.description or "permtracker" in t.description for t in tools)
     result = await call(registry(Server()), "match_employer", name="Google")
     assert "PERM Tracker" not in result.output and "permtracker.app" not in result.output
@@ -225,7 +228,7 @@ async def test_bad_arguments_are_rejected_before_any_request():
 
 @pytest.mark.skipif(not os.environ.get("AGENT_LIVE_WEB_TESTS"), reason="set AGENT_LIVE_WEB_TESTS=1")
 async def test_live_lookups():
-    tools = ToolRegistry(permtracker_tools(PermTrackerClient(api_key="")))
+    tools = ToolRegistry(permtracker_tools(PermTrackerClient(api_key=""), NO_PAGES))
     soc = await tools.run(ToolCall("c1", "find_soc_code", {"query": "software developer"}))
     employer = await tools.run(ToolCall("c2", "match_employer", {"name": "Google"}))
     assert not soc.is_error and "15-1252" in soc.output
@@ -238,3 +241,46 @@ async def test_live_keyed_endpoints():
     for name, arguments in [("perm_queue", {}), ("visa_bulletin", {}), ("search_employers", {"query": "google"})]:
         result = await tools.run(ToolCall("c1", name, arguments))
         assert not result.is_error, (name, result.output)
+
+
+async def test_data_page_reads_the_page_for_its_topic():
+    urls = []
+
+    def read_page(url):
+        urls.append(url)
+        return "| day | certified |\n| Nov 5 | 812 |"
+
+    result = await call(registry(Server(), read_page=read_page), "immigration_data_page", topic="perm_daily_decisions")
+    assert urls == ["https://permtracker.app/perm-decision-activity"]
+    assert result.output.startswith("Page: how many PERM cases DOL decided each day")
+    assert result.output.endswith("| Nov 5 | 812 |")
+
+
+def test_every_topic_is_listed_in_the_description_and_the_schema():
+    from runtime.permtracker_tools import PAGES
+
+    tool = next(t for t in permtracker_tools(PermTrackerClient(api_key=""), NO_PAGES) if t.name == "immigration_data_page")
+    assert tool.input_schema["properties"]["topic"]["enum"] == list(PAGES)
+    assert all(f"- {topic}: " in tool.description for topic in PAGES)
+    assert all(path.startswith("/") for path, _ in PAGES.values())
+
+
+async def test_an_unknown_topic_is_rejected_before_reading_anything():
+    urls = []
+    result = await call(registry(Server(), read_page=urls.append), "immigration_data_page", topic="everything")
+    assert result.is_error and urls == []
+
+
+async def test_a_page_that_cant_be_read_is_an_error():
+    def read_page(url):
+        raise RuntimeError(f"could not read {url}: no content")
+
+    result = await call(registry(Server(), read_page=read_page), "immigration_data_page", topic="debarments")
+    assert result.is_error and "could not read https://permtracker.app/debarments" in result.output
+
+
+@pytest.mark.skipif(not os.environ.get("AGENT_LIVE_WEB_TESTS"), reason="set AGENT_LIVE_WEB_TESTS=1")
+async def test_live_data_page():
+    tools = ToolRegistry(permtracker_tools(PermTrackerClient(api_key="")))
+    result = await tools.run(ToolCall("c1", "immigration_data_page", {"topic": "perm_daily_decisions"}))
+    assert not result.is_error and len(result.output) > 500

@@ -6,7 +6,7 @@ from runtime.prompts import system_prompt
 
 TODAY = date(2026, 11, 6)
 WEB = ["web_search", "read_web_page"]
-LOOKUPS = ["match_employer", "find_soc_code"]
+LOOKUPS = ["match_employer", "find_soc_code", "immigration_data_page"]
 RECORDS = ["perm_case_status", "perm_decision_estimate", "perm_queue", "visa_bulletin"]
 
 
@@ -47,3 +47,8 @@ def test_the_dol_tools_are_one_section_of_the_prompt():
     prompt = system_prompt(TODAY, LOOKUPS + RECORDS + WEB)
     section = next(p for p in prompt.split("\n\n") if "match_employer" in p)
     assert "perm_case_status" in section and "visa_bulletin" in section
+
+
+def test_the_order_is_record_tools_then_data_pages_then_the_web():
+    prompt = system_prompt(TODAY, LOOKUPS + RECORDS + WEB)
+    assert "Use the record tools first when they cover a question, then immigration_data_page, then the web." in prompt
