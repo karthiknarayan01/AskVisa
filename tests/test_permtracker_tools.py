@@ -66,11 +66,41 @@ def test_both_tools_only_read():
     assert all(t.idempotent and not t.requires_approval for t in tools)
 
 
-async def test_answer_starts_with_the_credit_line_then_the_data():
-    result = await call(registry(Server()), "match_employer", name="Google")
+async def test_answer_is_the_credit_line_then_the_data():
+    result = await call(registry(Server(body={**ANSWER, "data": {"codes": ["15-1252"]}})), "find_soc_code", query="x")
     first, rest = result.output.split("\n", 1)
     assert first == "PERM Tracker (permtracker.app) · as of 2026-11-06 · https://permtracker.app/perm-employers/google-llc"
-    assert json.loads(rest) == ANSWER["data"]
+    assert json.loads(rest) == {"codes": ["15-1252"]}
+
+
+@pytest.mark.parametrize(
+    "match, says",
+    [
+        ("exact", "Match: exact."),
+        ("possible", "ask them to confirm it is theirs"),
+        ("none", "not proof the employer never sponsors"),
+    ],
+)
+async def test_match_employer_says_what_to_do_with_each_kind_of_match(match, says):
+    body = {**ANSWER, "data": {**ANSWER["data"], "match": match}}
+    lines = (await call(registry(Server(body=body)), "match_employer", name="Google")).output.split("\n")
+    assert lines[0].startswith("PERM Tracker (permtracker.app)")
+    assert says in lines[1]
+    assert json.loads(lines[2]) == body["data"]
+
+
+async def test_an_unknown_match_value_adds_no_note():
+    body = {**ANSWER, "data": {"match": "fuzzy"}}
+    lines = (await call(registry(Server(body=body)), "match_employer", name="x")).output.split("\n")
+    assert len(lines) == 2 and json.loads(lines[1]) == {"match": "fuzzy"}
+
+
+def test_descriptions_say_when_to_use_each_tool_and_when_not_to():
+    by_name = {t.name: t.description for t in permtracker_tools(PermTrackerClient())}
+    assert "Does Acme sponsor green cards?" in by_name["match_employer"]
+    assert "Don't use it for the status of one case" in by_name["match_employer"]
+    assert "What SOC code would my job" in by_name["find_soc_code"]
+    assert all("cite both" in d for d in by_name.values())
 
 
 async def test_credit_line_falls_back_when_meta_is_missing():

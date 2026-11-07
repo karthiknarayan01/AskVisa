@@ -9,8 +9,12 @@ wage and H-1B LCA data and O*NET occupation data, and serves it through a JSON A
 
 They allow 60 calls a minute per address. Answers come back as
 {"data": ..., "meta": {"source", "asOf", "url"}}. A tool returns a first line naming the source,
-its date and its page, which the API terms require to be credited, then the data as JSON. Both
-tools only read, so they need no approval and are safe to re-run.
+its date and its page, which the API terms require to be credited, then the data as JSON.
+match_employer adds a line between them saying whether the match is exact, possible or none and
+what to do about it, so that guidance is in front of the model when it reads the numbers.
+
+The descriptions say when to use each tool and when not to; the system prompt only says what
+the group is for. Both tools only read, so they need no approval and are safe to re-run.
 """
 
 from __future__ import annotations
@@ -28,31 +32,84 @@ MAX_OUTPUT_CHARS = 20_000
 DEFAULT_SOURCE = "PERM Tracker (permtracker.app)"
 
 
+MATCH_NOTES = {
+    "exact": "Match: exact. The numbers below are this employer's record.",
+    "possible": (
+        "Match: possible. Tell the user which employer this is (name and any location) and ask "
+        "them to confirm it is theirs before relying on the numbers."
+    ),
+    "none": (
+        "Match: none. No PERM record under this name. That is not proof the employer never "
+        "sponsors: filings are under the legal name, so ask for it (on an offer letter or pay "
+        "stub) and look it up again."
+    ),
+}
+
+MATCH_EMPLOYER = """\
+Look up an employer's track record of sponsoring green cards (PERM labor certification) and H-1B \
+visas (LCAs), from Department of Labor filings.
+
+Use it when the user asks about a specific employer, for example:
+- "Does Acme sponsor green cards?" / "Will this company sponsor my H-1B?"
+- "How many PERM cases has Google filed? How many were certified or denied?"
+- "Is this employer still filing PERM cases?" (see the newest filing and filings in the last 12 months)
+- comparing job offers by how often each employer sponsors
+
+Don't use it for the status of one case, processing times, visa bulletin dates or what the rules \
+say. Its numbers are the employer's history, not a prediction for the user's own case.
+
+Returns: the match (exact, possible or none, with what to do for each), and for a match the \
+employer's PERM decisions, certified share, pending cases, newest filing, filings in the last 12 \
+months, and H-1B LCA and wage request counts. The first line credits PERM Tracker with the page \
+link and the date of the data: cite both when you use it."""
+
+FIND_SOC_CODE = """\
+Look up SOC occupation codes. A SOC code is the government's code for an occupation (e.g. 15-1252 \
+Software Developers); every PERM, prevailing wage and H-1B LCA filing is made under one, and with \
+the job's location and requirements it sets the minimum wage the employer must offer.
+
+Use it when the user asks about an occupation rather than an employer, for example:
+- "What SOC code would my job, data scientist, be filed under?"
+- "What does SOC 15-2051 cover, and which job titles are filed under it?"
+- "What's the median offered wage in PERM cases for software developers?"
+- "How often are PERM cases in my occupation approved?"
+- "My old filing used a 2010 SOC code; what is it now?"
+
+Pass a job title or a code. For a title it returns the codes employers filed it under, with how \
+often each was used: give the common ones, and say the right code depends on the actual duties, \
+not the title. For a code it returns its title, O*NET description and tasks, common filed titles, \
+PERM approval rate and median offered wage, and for a 2010 code the 2018 codes it became. Approval \
+rates and wages are history, not a prediction for the user's case. The first line credits PERM \
+Tracker with the page link and the date of the data: cite both when you use it."""
+
+
 def permtracker_tools(client: PermTrackerClient | None = None) -> list[Tool]:
     """The PERM Tracker tools, sharing one client."""
     client = client or PermTrackerClient()
     return [
         _tool(
             "match_employer",
-            "Look up an employer's green card (PERM) and H-1B sponsorship record by name, as "
-            "written on an offer letter or job posting. Returns whether it matched (exact, "
-            "possible or none), PERM decisions, the share certified, pending cases, the newest "
-            "filing, filings in the last 12 months, and H-1B LCA and wage request counts.",
-            {"name": _string("The employer name, e.g. 'Google' or 'Acme Corp LLC'")},
+            MATCH_EMPLOYER,
+            {"name": _string("The employer's name as the user gave it, e.g. 'Google' or 'Acme Corp LLC'")},
             ["name"],
-            lambda name: client.get("/lookup/employer", {"name": name}),
+            lambda name: match_employer(client, name),
         ),
         _tool(
             "find_soc_code",
-            "For a job title: the SOC occupation codes employers filed it under in PERM cases, "
-            "with how often each was used. For a SOC code: its title, O*NET description and "
-            "tasks, common job titles filed under it, the PERM approval rate and median offered "
-            "wage, and for a 2010 code the 2018 codes it became.",
-            {"query": _string("A job title, e.g. 'data scientist', or a SOC code, e.g. 15-2051")},
+            FIND_SOC_CODE,
+            {"query": _string("A job title, e.g. 'data scientist', or a SOC code, e.g. '15-2051'")},
             ["query"],
-            lambda query: client.get("/lookup/soc", {"q": query}),
+            lambda query: render(client.get("/lookup/soc", {"q": query})),
         ),
     ]
+
+
+def match_employer(client: PermTrackerClient, name: str) -> str:
+    """The lookup, with a line saying how far to trust the match and what to do next."""
+    body = client.get("/lookup/employer", {"name": name})
+    data = body.get("data") if isinstance(body, dict) else None
+    match = data.get("match") if isinstance(data, dict) else None
+    return render(body, MATCH_NOTES.get(match) if isinstance(match, str) else None)
 
 
 class PermTrackerError(Exception):
@@ -64,8 +121,8 @@ class PermTrackerClient:
         """`http` is for tests."""
         self.http = http or httpx.Client(timeout=TIMEOUT_SECONDS)
 
-    def get(self, path: str, params: dict[str, Any]) -> str:
-        """GET an endpoint and return its answer as text for the model."""
+    def get(self, path: str, params: dict[str, Any]) -> Any:
+        """GET an endpoint and return its decoded JSON (or text, if it isn't JSON)."""
         try:
             response = self.http.get(BASE_URL + path, params=params, headers={"Accept": "application/json"})
         except httpx.TimeoutException:
@@ -74,15 +131,16 @@ class PermTrackerClient:
             raise PermTrackerError(f"couldn't reach PERM Tracker: {e}") from None
         if response.status_code >= 400:
             raise PermTrackerError(_error_message(response))
-        return render(response)
+        try:
+            return response.json()
+        except ValueError:
+            return response.text
 
 
-def render(response: httpx.Response) -> str:
-    """A credit line (source, date, page), then the data as JSON, clipped to MAX_OUTPUT_CHARS."""
-    try:
-        body = response.json()
-    except ValueError:
-        return _clip(response.text)
+def render(body: Any, note: str | None = None) -> str:
+    """A credit line (source, date, page), an optional note, then the data as JSON, clipped."""
+    if isinstance(body, str):
+        return _clip(body)
     if not isinstance(body, dict) or "data" not in body:
         return _clip(json.dumps(body, ensure_ascii=False))
     meta = body.get("meta") or {}
@@ -93,7 +151,8 @@ def render(response: httpx.Response) -> str:
             meta.get("url"),
         ) if part
     )
-    return _clip(f"{credit}\n{json.dumps(body['data'], ensure_ascii=False)}")
+    lines = [credit, note, json.dumps(body["data"], ensure_ascii=False)]
+    return _clip("\n".join(line for line in lines if line))
 
 
 def _error_message(response: httpx.Response) -> str:
