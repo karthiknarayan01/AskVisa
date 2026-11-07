@@ -1,0 +1,183 @@
+# Evals for the date calculators (calculator_tools.py): does the model use a calculator instead
+# of doing date arithmetic itself, pass the user's dates correctly, ask for a date it doesn't
+# have, and report what the calculator returned? The calculators run for real (dated `today`),
+# so each judge item names the exact answer the calculator gives for the case's dates.
+
+[suite]
+name = "calculators"
+today = "2026-11-07"
+tools = ["calculators", "web"]
+
+[defaults.web_search]
+output = "No results."
+
+[defaults.read_web_page]
+output = "(the page has no text)"
+
+
+# --- grace periods: grace_period_end -----------------------------------------------------
+
+[[case]]
+id = "grace-h1b-layoff"
+question = "I was laid off from my H-1B job. My last day was October 3, 2026, and my I-94 is valid until September 30, 2027. How long can I stay?"
+must_call = ["grace_period_end"]
+judge = [
+    "Says the grace period ends on December 1, 2026 (December 2 is acceptable if it explains the one-day difference)",
+    "Says the user can't work during the grace period",
+    "Mentions at least one way forward, such as a new employer filing a transfer, a change of status, or leaving",
+]
+[case.args.grace_period_end]
+status = "H-1B"
+end_date = "2026-10-03"
+i94_expiry = "2027-09-30"
+
+[[case]]
+id = "grace-asks-for-the-date"
+question = "I just got laid off from my H-1B job. When does my grace period end?"
+must_not_call = ["grace_period_end"]
+judge = [
+    "Asks for the last day of employment",
+    "Does not give a specific calendar date for the end of the grace period",
+]
+
+[[case]]
+id = "grace-capped-by-i94"
+split = "held_out"
+question = "I'm on TN. My last day of work was November 1, 2026, and my I-94 expires on November 20, 2026. When do I have to leave or change status?"
+must_call = ["grace_period_end"]
+judge = ["Says the grace period ends on November 20, 2026, because the I-94 ends before the 60 days do"]
+[case.args.grace_period_end]
+status = "TN"
+i94_expiry = "2026-11-20"
+
+[[case]]
+id = "grace-after-opt"
+question = "My OPT ends on June 30, 2027. How long can I stay in the US after that?"
+must_call = ["grace_period_end"]
+judge = ["Says the grace period lasts 60 days, ending August 28, 2027 (August 29 is acceptable if it explains the one-day difference)"]
+[case.args.grace_period_end]
+status = "F-1"
+end_date = "2027-06-30"
+
+
+# --- OPT unemployment: opt_unemployment_days ---------------------------------------------
+
+[[case]]
+id = "opt-days-left"
+question = "I'm on post-completion OPT. I was unemployed for 20 days earlier, and I've been unemployed again since October 1, 2026. How many unemployment days do I have left?"
+must_call = ["opt_unemployment_days"]
+judge = [
+    "Says 32 unemployment days are left",
+    "Says the official count is the one in the SEVP Portal or with the DSO",
+]
+[case.args.opt_unemployment_days]
+opt_type = "post_completion"
+days_used = "20"
+unemployed_since = "2026-10-01"
+
+[[case]]
+id = "opt-stem-total"
+split = "held_out"
+question = "I used 60 unemployment days on my regular OPT, and I've used 15 more since starting STEM OPT. How many do I have left?"
+must_call = ["opt_unemployment_days"]
+judge = ["Says 75 of the 150 unemployment days are left"]
+[case.args.opt_unemployment_days]
+opt_type = "stem"
+days_used = "75"
+
+
+# --- maximum stay: max_stay_end ----------------------------------------------------------
+
+[[case]]
+id = "h1b-max-with-time-abroad"
+question = "My H-1B started on October 1, 2021, and I've spent 120 days outside the US since then. When do I hit the six-year limit?"
+must_call = ["max_stay_end"]
+judge = [
+    "Says the limit is reached on January 28, 2028",
+    "Mentions that extensions past six years are possible in some cases, without promising one",
+]
+[case.args.max_stay_end]
+classification = "H-1B"
+start_date = "2021-10-01"
+days_outside_us = "120"
+
+[[case]]
+id = "h1b-max-mentions-recapture"
+split = "held_out"
+question = "I started on H-1B on March 1, 2022. When will I max out?"
+judge = [
+    "Gives February 29, 2028 as the date without any time abroad added back, or asks how many days were spent outside the US before giving a date",
+    "Mentions that time spent outside the US can be added back",
+]
+[case.args.max_stay_end]
+start_date = "2022-03-01"
+
+
+# --- naturalization: naturalization_filing_date ------------------------------------------
+
+[[case]]
+id = "naturalization-five-year"
+question = "I got my green card on March 15, 2022. When can I apply for citizenship?"
+must_call = ["naturalization_filing_date"]
+judge = [
+    "Says the earliest filing date is December 15, 2026",
+    "Mentions at least one other requirement, such as physical presence, continuous residence or the civics test",
+]
+[case.args.naturalization_filing_date]
+green_card_date = "2022-03-15"
+path = "five_year"
+
+[[case]]
+id = "naturalization-three-year"
+split = "held_out"
+question = "I'm married to a US citizen and got my green card through the marriage on June 1, 2024. When can I file for naturalization?"
+must_call = ["naturalization_filing_date"]
+judge = [
+    "Says the earliest filing date is March 3, 2027",
+    "Mentions the user must still be married to and living with the US citizen spouse",
+]
+[case.args.naturalization_filing_date]
+green_card_date = "2024-06-01"
+path = "three_year"
+
+[[case]]
+id = "naturalization-physical-presence"
+question = "I've had my green card since March 15, 2022. I've spent about 1,000 days abroad since then; my longest trip was 5 months. Can I file at the earliest date?"
+must_call = ["naturalization_filing_date"]
+judge = [
+    "Says the physical presence requirement (913 days in the US) is not met with about 1,000 days abroad",
+    "Does not tell the user they can file at the earliest date",
+]
+[case.args.naturalization_filing_date]
+green_card_date = "2022-03-15"
+days_outside_us = "1000"
+
+
+# --- other date arithmetic: date_math ----------------------------------------------------
+
+[[case]]
+id = "date-plus-days"
+question = "My I-485 was filed on August 20, 2026. What date is 180 days after that?"
+must_call = ["date_math"]
+judge = ["Says February 16, 2027"]
+[case.args.date_math]
+start = "2026-08-20"
+days = "180"
+
+[[case]]
+id = "days-until-i94-expires"
+split = "held_out"
+question = "How many days until my I-94 expires on March 1, 2027?"
+must_call = ["date_math"]
+judge = ["Says 114 days (115 is acceptable if it says that counts today too)"]
+[case.args.date_math]
+end = "2027-03-01"
+
+
+# --- when not to calculate ---------------------------------------------------------------
+
+[[case]]
+id = "general-rule-needs-no-calculator"
+question = "In general, how long is the grace period after losing an H-1B job?"
+must_not_call = ["grace_period_end", "date_math"]
+judge = ["Explains it is up to 60 days, or until the I-94 ends if that comes first"]

@@ -18,6 +18,7 @@ All tools are pure functions with no network access: no approval, safe to re-run
 from __future__ import annotations
 
 import calendar
+from collections.abc import Callable
 from datetime import date, timedelta
 
 from runtime.tools import Tool
@@ -122,8 +123,12 @@ Returns:
 and the other requirements to meet"""
 
 
-def calculator_tools() -> list[Tool]:
-    """The date calculators."""
+def calculator_tools(today: Callable[[], date] = date.today) -> list[Tool]:
+    """The date calculators. `today` gives the date used when as_of isn't passed; evals fix it."""
+
+    def as_of_today(fn):
+        return lambda as_of=None, **arguments: fn(as_of=as_of or today().isoformat(), **arguments)
+
     day = {"type": "string", "description": "A date, YYYY-MM-DD"}
     return [
         _tool(
@@ -149,7 +154,7 @@ def calculator_tools() -> list[Tool]:
                 "as_of": {**day, "description": "Count up to this date (default today), YYYY-MM-DD"},
             },
             ["opt_type"],
-            opt_unemployment_days,
+            as_of_today(opt_unemployment_days),
         ),
         _tool(
             "grace_period_end",
@@ -173,7 +178,7 @@ def calculator_tools() -> list[Tool]:
                 "as_of": {**day, "description": "Report time used up to this date (default today), YYYY-MM-DD"},
             },
             ["classification", "start_date"],
-            max_stay_end,
+            as_of_today(max_stay_end),
         ),
         _tool(
             "naturalization_filing_date",
