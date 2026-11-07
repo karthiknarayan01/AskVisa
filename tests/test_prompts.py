@@ -99,10 +99,37 @@ def test_federal_register_has_its_own_section_before_the_calculators():
     assert prompt.index("read_regulation") < prompt.index("The Federal Register") < prompt.index("Date calculators")
 
 
-def test_the_advice_method_follows_the_scope_and_comes_before_the_tools():
+def section(prompt, start):
+    return next(p for p in prompt.split("\n\n") if p.startswith(start))
+
+
+def test_scope_then_how_to_answer_then_the_advice_method_then_the_tools():
     prompt = system_prompt(TODAY, LOOKUPS + WEB)
-    parts = prompt.split("\n\n")
-    assert parts[2].startswith("When the user asks what they should do, or how their options compare:")
+    order = [prompt.index(s) for s in ("Scope:", "How to answer:", "When the user asks what they should do", "match_employer")]
+    assert order == sorted(order)
+
+
+def test_the_advice_method_lists_its_steps():
+    advice = section(system_prompt(TODAY, LOOKUPS + WEB), "When the user asks what they should do")
     for step in ("ask for it first", "List every realistic option", "Look up the facts", "Compare the options on the same points", "next concrete step"):
-        assert step in parts[2], step
-    assert parts[2].endswith("Lay out the trade-offs; don't choose for the user.")
+        assert step in advice, step
+    assert advice.endswith("Lay out the trade-offs; don't choose for the user.")
+
+
+def test_how_to_answer():
+    answer = section(system_prompt(TODAY, WEB), "How to answer:")
+    assert "Lead with the direct answer" in answer
+    assert "explain terms such as PERM" in answer
+    assert "Reply in the language the user writes in." in answer
+    assert "Never state a number, date, status, fee or rule that didn't come from a tool result" in answer
+
+
+def test_general_concepts_need_no_tools_but_changing_facts_do():
+    scope = section(system_prompt(TODAY, WEB), "Scope:")
+    assert "Explain general concepts directly" in scope
+    assert "Look up anything that changes or is specific to the user" in scope
+
+
+def test_rule_changes_go_to_the_federal_register_before_the_statistics_pages():
+    prompt = system_prompt(TODAY, LOOKUPS + WEB)
+    assert "immigration_data_page; for rule changes and their dates, use the Federal Register tools first" in prompt

@@ -153,3 +153,13 @@ async def _run(client, name, **arguments):
     result = await _registry(client).run(ToolCall("c", name, arguments))
     assert not result.is_error, result.output
     return result.output
+
+
+def test_web_descriptions_follow_the_shared_layout_and_defer_to_the_specialized_tools():
+    from runtime.web_tools import web_tools
+
+    tools = {t.name: t.description for t in web_tools(client=object())}
+    for description in tools.values():
+        assert "\nUse it for:\n- " in description and "\nReturns:\n- " in description
+    assert "Don't use it for:\n- anything a specialized tool covers" in tools["web_search"]
+    assert "policy changes" not in tools["web_search"]

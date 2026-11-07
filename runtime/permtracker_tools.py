@@ -327,7 +327,7 @@ PAGES: dict[str, tuple[str, str]] = {
     "wage_violations": ("/wage-violations", "employers found in violation of visa wage rules"),
     "employers_under_review": ("/perm-employers/under-review", "employers whose PERM cases are under extra DOL review"),
     "law_firm_rankings": ("/law-firm-rankings", "law firms ranked by PERM filings"),
-    "policy_changes": ("/policy-changes", "recent immigration policy changes and their effective dates"),
+    "policy_changes": ("/policy-changes", "a summary list of recent policy changes; for a rule's text and dates, use search_federal_register first"),
 }
 
 IMMIGRATION_DATA_PAGE = """\

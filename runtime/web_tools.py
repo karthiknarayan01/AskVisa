@@ -34,20 +34,53 @@ TIMEOUT_SECONDS = 10
 TIME_LIMITS = {"day": "d", "week": "w", "month": "m", "year": "y"}
 
 
+WEB_SEARCH = """\
+Searches the web. The general-purpose lookup for anything the other tools don't cover.
+
+Use it for:
+- immigration questions no other tool answers, for example form instructions and filing \
+addresses, how a USCIS process works step by step, travel and reentry rules, or news coverage of \
+an announcement
+- a second source, when a tool returned nothing useful or to check what it returned
+
+Don't use it for:
+- anything a specialized tool covers: DOL and visa bulletin data, the regulations, rule changes \
+and their effective dates (the Federal Register tools), statistics pages, or date arithmetic. Try \
+those first.
+
+How to use it:
+- Add site:uscis.gov, site:travel.state.gov, site:dol.gov or similar to the query to stay on \
+official sources.
+- Use topic "news" and a time_range for recent announcements.
+- Call read_web_page when a result's snippet isn't enough to answer.
+
+Returns:
+- for each result: title, URL and a snippet; for news, also the date and source"""
+
+READ_WEB_PAGE = """\
+Reads one web page's main content as text (markdown).
+
+Use it for:
+- the full content of a result from web_search, when its snippet isn't enough: form \
+instructions, a policy page, an announcement
+- a page the user links to
+
+How to use it:
+- Pass the page's full http(s) URL.
+- Prefer official pages (uscis.gov, travel.state.gov, dol.gov, cbp.gov, ice.gov).
+- Mention the page's date, if it has one, and that the answer comes from it.
+
+Returns:
+- the page's main text, without menus and ads, up to about 20,000 characters"""
+
+
 def web_tools(client: Any = None) -> list[Tool]:
     """The tools, sharing one search client."""
     client = client or DDGS(timeout=TIMEOUT_SECONDS)
     return [
         Tool(
             name="web_search",
-            description=(
-                "Search the web. The general-purpose lookup: use it for any immigration question "
-                "the other tools don't cover (policy changes, forms and fees, processing, news), "
-                "when a tool returned nothing useful, or to check what a tool returned. Add "
-                "site:uscis.gov, site:travel.state.gov or similar to the query to stay on official "
-                "sources. Use topic 'news' and a time_range for recent changes. Returns titles, "
-                "URLs, dates and sources for news, and a snippet of each result."
-            ),
+            description=WEB_SEARCH,
             input_schema={
                 "type": "object",
                 "properties": {
@@ -74,8 +107,7 @@ def web_tools(client: Any = None) -> list[Tool]:
         ),
         Tool(
             name="read_web_page",
-            description="Read a web page's main content as markdown. Use it after web_search "
-            "when a result's snippet isn't enough.",
+            description=READ_WEB_PAGE,
             input_schema={
                 "type": "object",
                 "properties": {"url": {"type": "string", "description": "http(s) URL"}},
