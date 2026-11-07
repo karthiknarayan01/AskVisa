@@ -22,7 +22,7 @@ install_package() {
     # Reinstall only when pyproject.toml has changed since the last install.
     local stamp="$VENV/.agent-runtime-installed" want
     want="$(cksum < "$ROOT/pyproject.toml")"
-    if [[ -x "$VENV/bin/agent-runtime" && -f "$stamp" && "$(cat "$stamp")" == "$want" ]]; then
+    if [[ -x "$VENV/bin/agent-server" && -f "$stamp" && "$(cat "$stamp")" == "$want" ]]; then
         return
     fi
     if [[ ! -x "$VENV/bin/python" ]]; then
@@ -31,7 +31,7 @@ install_package() {
         say "Creating a virtual environment with $("$python" --version)…"
         "$python" -m venv "$VENV"
     fi
-    say "Installing agent-runtime…"
+    say "Installing the assistant…"
     mkdir -p "$STATE_DIR"
     local log="$STATE_DIR/install.log"
     if ! { "$VENV/bin/python" -m pip install --upgrade pip &&

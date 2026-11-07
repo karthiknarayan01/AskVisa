@@ -32,7 +32,7 @@ def env(tmp_path):
     (venv / "bin").mkdir(parents=True)
     bin_dir.mkdir(parents=True)
     for path, text in [(bin_dir / "ollama", FAKE_OLLAMA), (bin_dir / "curl", FAKE_CURL),
-                       (venv / "bin" / "agent-eval", FAKE_EVAL), (venv / "bin" / "agent-runtime", "#!/bin/sh\n")]:
+                       (venv / "bin" / "agent-eval", FAKE_EVAL), (venv / "bin" / "agent-server", "#!/bin/sh\n")]:
         path.write_text(text)
         path.chmod(0o755)
     checksum = subprocess.run(["cksum"], stdin=open(ROOT / "pyproject.toml"), capture_output=True, text=True).stdout

@@ -11,7 +11,7 @@
 
 Each run writes a directory under evals/results/ (git-ignored) holding results.json and the
 sessions database, so any attempt's full trace can be opened with
-`agent-runtime --db <dir>/sessions.db --resume <session id>`.
+`agent-server --db <dir>/sessions.db`, then GET /api/sessions/<session id>.
 
 The judge defaults to the provider and model being evaluated, so a local run needs nothing but
 Ollama: the judge items are concrete checklist lines against the tool results, which a small
