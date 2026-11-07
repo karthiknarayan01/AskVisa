@@ -38,6 +38,16 @@ class Event:
     ts: str
 
 
+@dataclass(frozen=True)
+class SessionSummary:
+    """One session for a list: its first user message stands in as a title."""
+
+    session_id: str
+    created_at: str
+    updated_at: str
+    title: str
+
+
 class UnknownSession(KeyError):
     """Raised when appending to or loading a session that was never created."""
 
@@ -132,6 +142,26 @@ class EventLog:
             "SELECT session_id FROM sessions ORDER BY created_at DESC, rowid DESC LIMIT 1"
         ).fetchone()
         return row[0] if row else None
+
+    def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
+        """The most recently active sessions first, each titled by its first user message."""
+        rows = self._conn.execute(
+            """
+            SELECT s.session_id, s.created_at, COALESCE(MAX(e.ts), s.created_at) AS updated_at,
+                   (SELECT payload FROM events
+                     WHERE session_id = s.session_id AND type = 'user_message'
+                     ORDER BY seq LIMIT 1) AS first_message
+              FROM sessions s LEFT JOIN events e ON e.session_id = s.session_id
+             GROUP BY s.session_id
+             ORDER BY updated_at DESC, s.rowid DESC
+             LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [
+            SessionSummary(sid, created, updated, json.loads(first)["text"] if first else "")
+            for sid, created, updated, first in rows
+        ]
 
     def close(self) -> None:
         self._conn.close()

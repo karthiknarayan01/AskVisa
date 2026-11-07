@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Set up agent-runtime and open the chat.
+# Set up the assistant and start its server.
 #
-#   ./start.sh                 first run: install, choose a model, then chat; later runs: chat
+#   ./start.sh                 first run: install, choose a model, then serve; later runs: serve
 #   ./start.sh --setup         choose the model again
-#   ./start.sh --resume latest any other arguments are passed to agent-runtime
+#   ./start.sh --port 9000     any other arguments are passed to agent-server
 #
 # First run:
 #   1. creates .venv next to this script and installs the package (again whenever
@@ -16,8 +16,8 @@
 # Service keys the tools use (PERMTRACKER_API_KEY) are read from a .env file next to this script
 # when it exists, as KEY=value lines; it is git-ignored and never asked for.
 #
-# Later runs read that file and go straight to the chat. For a local model they only make sure
-# Ollama is running and the model is there, which takes a moment.
+# Later runs read that file and start the server straight away. For a local model they only make
+# sure Ollama is running and the model is there, which takes a moment.
 
 set -euo pipefail
 
@@ -125,12 +125,12 @@ save_config() {
     say "Saved to $CONFIG."
 }
 
-# --- the chat -------------------------------------------------------------------------------
+# --- the server -----------------------------------------------------------------------------
 
 launch() {
     [[ -n "$ANTHROPIC_KEY" && -z "${ANTHROPIC_API_KEY:-}" ]] && export ANTHROPIC_API_KEY="$ANTHROPIC_KEY"
     [[ -n "$DEEPSEEK_KEY" && -z "${DEEPSEEK_API_KEY:-}" ]] && export DEEPSEEK_API_KEY="$DEEPSEEK_KEY"
-    exec "$VENV/bin/agent-runtime" --provider "$PROVIDER" --model "$MODEL" "$@"
+    exec "$VENV/bin/agent-server" --provider "$PROVIDER" --model "$MODEL" "$@"
 }
 
 main "$@"

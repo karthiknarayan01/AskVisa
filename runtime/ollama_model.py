@@ -1,7 +1,7 @@
 """ModelClient for open models running on this computer through Ollama. Default: Qwen 3.5 9B.
 
     ollama pull qwen3.5:9b          once: downloads the model (~6.6 GB)
-    agent-runtime --provider ollama
+    agent-server --provider ollama
 
 Ollama (https://ollama.com) serves models over HTTP on localhost:11434 (OLLAMA_HOST to change
 it). This adapter uses its native chat API through the `ollama` package, streamed: text and

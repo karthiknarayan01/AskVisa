@@ -1,6 +1,6 @@
 """start.sh end to end, with a fake Ollama, a fake curl and an already-installed fake venv.
 
-The fake agent-runtime prints the arguments and API key it was started with, so each test can
+The fake agent-server prints the arguments and API key it was started with, so each test can
 check what the script launched.
 """
 
@@ -35,7 +35,7 @@ def env(tmp_path):
     bin_dir.mkdir(parents=True)
     _executable(bin_dir / "ollama", FAKE_OLLAMA)
     _executable(bin_dir / "curl", FAKE_CURL)
-    _executable(venv / "bin" / "agent-runtime", FAKE_CLI)
+    _executable(venv / "bin" / "agent-server", FAKE_CLI)
     checksum = subprocess.run(
         ["cksum"], stdin=open(ROOT / "pyproject.toml"), capture_output=True, text=True, check=True
     ).stdout
@@ -120,7 +120,7 @@ def test_a_key_already_in_the_environment_is_used_and_not_saved(env):
 
 def test_service_keys_in_the_env_file_reach_the_chat_without_a_prompt(env):
     Path(env["AGENT_RUNTIME_ENV_FILE"]).write_text('PERMTRACKER_API_KEY="pt_live_abc"\nOTHER=ignored\n')
-    _executable(Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-runtime",
+    _executable(Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-server",
                 '#!/bin/sh\necho "PERM ${PERMTRACKER_API_KEY:-none} OTHER ${OTHER:-none}"\n')
     result = run(env, "1\n")
 
@@ -131,7 +131,7 @@ def test_service_keys_in_the_env_file_reach_the_chat_without_a_prompt(env):
 
 def test_a_key_already_in_the_environment_beats_the_env_file(env):
     Path(env["AGENT_RUNTIME_ENV_FILE"]).write_text("PERMTRACKER_API_KEY=from_file\n")
-    _executable(Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-runtime",
+    _executable(Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-server",
                 '#!/bin/sh\necho "PERM ${PERMTRACKER_API_KEY:-none}"\n')
     result = run({**env, "PERMTRACKER_API_KEY": "from_env"}, "1\n")
     assert "PERM from_env" in result.stdout
