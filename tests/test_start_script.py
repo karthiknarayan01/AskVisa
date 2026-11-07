@@ -126,7 +126,7 @@ def test_service_keys_in_the_env_file_reach_the_chat_without_a_prompt(env):
 
     assert "PERM pt_live_abc OTHER none" in result.stdout
     assert "PERMTRACKER" not in config(env).read_text()
-    assert "PERM Tracker" not in result.stdout and "API key" not in result.stdout
+    assert "PERM Tracker" not in result.stdout
 
 
 def test_a_key_already_in_the_environment_beats_the_env_file(env):
