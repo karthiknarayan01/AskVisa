@@ -1,7 +1,8 @@
 """The system prompt the CLI gives the model.
 
-It is short on purpose: it sets the assistant's scope and says which tools cover which purposes,
-one bullet per purpose. How to use each tool is in that tool's description. A purpose is listed
+It is short on purpose: it sets the assistant's scope, the method for advice questions (what to
+ask, which options to consider, how to compare them), and which tools cover which purposes, one
+bullet per purpose. How to use each tool is in that tool's description. A purpose is listed
 only when its tool is present, so the prompt never points at a tool the model doesn't have.
 
 It states today's date, since a model can't know it otherwise and needs it to judge what "latest"
@@ -28,6 +29,21 @@ is good or bad, decline the same way.
 against EB-3) without taking a side.
 - Use the tools to look things up instead of answering from memory: rules, fees, dates and \
 processing times change."""
+
+ADVICE = """\
+When the user asks what they should do, or how their options compare:
+1. Work out their situation from what they said. If a fact that changes the answer is missing \
+(for example country of birth, degree, current status and its dates, or whether a petition is \
+approved), ask for it first, in one short question listing what you need.
+2. List every realistic option, including the less obvious ones: changing status, a different \
+employer or category, waiting, or leaving and returning.
+3. Look up the facts each option depends on with the tools before comparing: who qualifies, \
+current waits, processing times, deadlines.
+4. Compare the options on the same points: who qualifies, how long it takes, cost, risks, and what \
+the user gives up.
+5. End with the next concrete step for each option, the assumptions the comparison rests on, and \
+when the situation is worth taking to an immigration attorney.
+Lay out the trade-offs; don't choose for the user."""
 
 # (tool that must be present, the purpose it serves), in the order the model should prefer them.
 PERM_PURPOSES = [
@@ -111,7 +127,7 @@ def system_prompt(today: date, tools: Iterable[str]) -> str:
     The specialized groups come first and the web last, since it covers whatever they don't.
     """
     names = set(tools)
-    parts = [BASE.format(today=today.strftime("%A, %B %d, %Y"))]
+    parts = [BASE.format(today=today.strftime("%A, %B %d, %Y")), ADVICE]
     purposes = [f"- {purpose}" for tool, purpose in PERM_PURPOSES if tool in names]
     if purposes:
         parts.append(PERM.format(purposes="\n".join(purposes)))
