@@ -47,6 +47,7 @@ def env(tmp_path):
         "XDG_STATE_HOME": str(tmp_path / "state"),
         "AGENT_RUNTIME_VENV": str(venv),
         "FAKE_DIR": str(fake),
+        "AGENT_RUNTIME_ENV_FILE": str(tmp_path / ".env"),
     }
 
 
@@ -115,6 +116,25 @@ def test_a_key_already_in_the_environment_is_used_and_not_saved(env):
 
     assert "ANTHROPIC sk-env" in result.stdout
     assert "sk-env" not in config(env).read_text()
+
+
+def test_service_keys_in_the_env_file_reach_the_chat_without_a_prompt(env):
+    Path(env["AGENT_RUNTIME_ENV_FILE"]).write_text('PERMTRACKER_API_KEY="pt_live_abc"\nOTHER=ignored\n')
+    _executable(Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-runtime",
+                '#!/bin/sh\necho "PERM ${PERMTRACKER_API_KEY:-none} OTHER ${OTHER:-none}"\n')
+    result = run(env, "1\n")
+
+    assert "PERM pt_live_abc OTHER none" in result.stdout
+    assert "PERMTRACKER" not in config(env).read_text()
+    assert "PERM Tracker" not in result.stdout and "API key" not in result.stdout
+
+
+def test_a_key_already_in_the_environment_beats_the_env_file(env):
+    Path(env["AGENT_RUNTIME_ENV_FILE"]).write_text("PERMTRACKER_API_KEY=from_file\n")
+    _executable(Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-runtime",
+                '#!/bin/sh\necho "PERM ${PERMTRACKER_API_KEY:-none}"\n')
+    result = run({**env, "PERMTRACKER_API_KEY": "from_env"}, "1\n")
+    assert "PERM from_env" in result.stdout
 
 
 def test_setup_flag_asks_again(env):

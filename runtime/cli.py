@@ -170,7 +170,7 @@ def make_chat(args: argparse.Namespace, console: Console, read, log: EventLog) -
         options={},
     )
     approver: Approver = AutoApprove() if args.yes else TerminalApprover(chat.terminal, console)
-    chat.options = {"approver": approver, "system_prompt": system_prompt(date.today(), web, perm=True)}
+    chat.options = {"approver": approver, "system_prompt": system_prompt(date.today(), [t.name for t in tools.specs()])}
     window = getattr(model, "context_window", None)
     if window is not None:
         # The model knows its own window (a local model is told its size), so compact against it.

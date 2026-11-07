@@ -8,6 +8,7 @@ so a resumed session gets the current date.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
 
 BASE = (
@@ -32,20 +33,33 @@ WEB = (
     "the date of what you rely on."
 )
 
-PERM = (
+PERM_LOOKUPS = (
     "match_employer and find_soc_code cover an employer's record of sponsoring green cards "
     "(PERM) and H-1B visas, and SOC occupation codes, from Department of Labor data."
+)
+
+PERM_RECORDS = (
+    "perm_case_status, perm_decision_estimate and perm_queue cover a DOL case's status and "
+    "details, when a pending PERM case is likely to be decided, and current PERM processing "
+    "times and backlog. visa_bulletin covers priority date cutoffs. The employer, law firm and "
+    "occupation search and profile tools, and export_search, cover deeper DOL records."
 )
 
 END = "When you have the answer, reply without calling a tool."
 
 
-def system_prompt(today: date, web: bool, perm: bool = False) -> str:
-    """The prompt for a session; `web` and `perm` add the guidance for those tools."""
+def system_prompt(today: date, tools: Iterable[str]) -> str:
+    """The prompt for a session with these tools: a line for each group of tools present.
+
+    The specialized groups come first and the web last, since it covers whatever they don't.
+    """
+    names = set(tools)
     parts = [BASE.format(today=today.strftime("%A, %B %d, %Y"))]
-    if perm:
-        parts.append(PERM)
-    if web:
+    if "match_employer" in names:
+        parts.append(PERM_LOOKUPS)
+    if "perm_case_status" in names:
+        parts.append(PERM_RECORDS)
+    if "web_search" in names:
         parts.append(WEB)
     parts.append(END)
     return "\n\n".join(parts)
