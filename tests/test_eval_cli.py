@@ -93,3 +93,39 @@ def test_a_missing_key_is_reported_with_who_needs_it(suite, tmp_path, monkeypatc
     monkeypatch.setattr(cli, "make_model", no_key)
     assert cli.main([str(suite), "--out", str(tmp_path)]) == 2
     assert "ANTHROPIC_API_KEY is not set: it is needed for the model" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "flags, expected",
+    [
+        ([], ("anthropic", "claude-sonnet-5-5")),
+        (["--provider", "ollama"], ("ollama", "qwen3.5:9b")),
+        (["--provider", "ollama", "--model", "qwen3.5:4b"], ("ollama", "qwen3.5:4b")),
+        (["--provider", "ollama", "--judge-model", "qwen3.5:27b"], ("ollama", "qwen3.5:27b")),
+        (["--provider", "ollama", "--judge-provider", "anthropic"], ("anthropic", "claude-sonnet-5-5")),
+    ],
+)
+def test_the_judge_defaults_to_the_evaluated_model(flags, expected):
+    args = cli.parse_args(["suite.toml", *flags])
+    model_name = args.model or cli.DEFAULT_MODELS[args.provider]
+    assert cli.judge_choice(args, model_name) == expected
+
+
+class LocalModel(FakeModel):
+    def __init__(self, replies, checked):
+        super().__init__(replies=replies)
+        self.checked = checked
+
+    async def check(self):
+        self.checked.append(True)
+
+
+def test_a_separate_local_judge_is_checked_at_startup(suite, tmp_path, monkeypatch, capsys):
+    checked_agent, checked_judge = [], []
+    agent = LocalModel([say("No."), say("No.")], checked_agent)
+    judge = LocalModel([], checked_judge)
+    monkeypatch.setattr(cli, "make_model", lambda provider, model=None: judge if model == "qwen3.5:27b" else agent)
+    code = cli.main([str(suite), "--out", str(tmp_path), "--provider", "ollama", "--judge-model", "qwen3.5:27b",
+                     "--split", "held_out"])
+    assert code == 0 and checked_agent == [True] and checked_judge == [True]
+    assert "judge qwen3.5:27b (ollama)" in capsys.readouterr().out

@@ -1,7 +1,10 @@
 """agent-eval: run an eval suite against a model and report how it did.
 
+    agent-eval evals/suites/permtracker.toml --provider ollama     local Qwen, judged by local Qwen
+    agent-eval evals/suites/permtracker.toml --provider ollama --judge-model qwen3.5:27b
+                                                                   a bigger local model as the judge
     agent-eval evals/suites/permtracker.toml                       Anthropic, judged by Anthropic
-    agent-eval evals/suites/permtracker.toml --provider ollama     local Qwen, judged by Anthropic
+    agent-eval evals/suites/permtracker.toml --provider ollama --judge-provider anthropic
     agent-eval evals/suites/permtracker.toml --split held_out      only the held-out cases
     agent-eval evals/suites/permtracker.toml --case visa-bulletin-not-current --repeat 5
     agent-eval evals/suites/permtracker.toml --no-judge            only the deterministic checks
@@ -10,8 +13,11 @@ Each run writes a directory under evals/results/ (git-ignored) holding results.j
 sessions database, so any attempt's full trace can be opened with
 `agent-runtime --db <dir>/sessions.db --resume <session id>`.
 
-The judge defaults to Anthropic's default model, a different model from the one usually being
-graded, so an agent isn't grading itself; --judge-provider and --judge-model change it. The exit
+The judge defaults to the provider and model being evaluated, so a local run needs nothing but
+Ollama: the judge items are concrete checklist lines against the tool results, which a small
+model can grade. A model grading its own answers can be lenient, though, so a stronger judge
+(--judge-model, or --judge-provider for a hosted one) gives more trustworthy verdicts. A local
+judge is checked at startup like a local model: Ollama running, model downloaded. The exit
 status is 0 only when every attempt passed, so a suite can gate CI.
 """
 
@@ -51,8 +57,11 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("suite", type=Path, help="the suite file, e.g. evals/suites/permtracker.toml")
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="anthropic", help="the model being evaluated")
     parser.add_argument("--model", help="model name (default: the provider's default)")
-    parser.add_argument("--judge-provider", choices=sorted(PROVIDERS), default="anthropic")
-    parser.add_argument("--judge-model", help="judge model name (default: the provider's default)")
+    parser.add_argument("--judge-provider", choices=sorted(PROVIDERS),
+                        help="who grades the answers (default: the same as --provider)")
+    parser.add_argument("--judge-model",
+                        help="judge model name (default: the evaluated model when the judge provider is the "
+                             "same, else that provider's default)")
     parser.add_argument("--no-judge", action="store_true", help="skip judge items; run only the checks")
     parser.add_argument("--split", choices=["dev", "held_out", "all"], default="all")
     parser.add_argument("--case", action="append", dest="cases", help="run only this case id (repeatable)")
@@ -75,8 +84,13 @@ async def run(args: argparse.Namespace, console: Console) -> int:
     model = _make(args.provider, args.model, "the model")
     if args.provider in LOCAL_PROVIDERS:
         await model.check()
-    judge = None if args.no_judge else _make(args.judge_provider, args.judge_model, "the judge (or pass --no-judge)")
-    judge_name = "none" if judge is None else (args.judge_model or DEFAULT_MODELS[args.judge_provider])
+    judge, judge_name = None, "none"
+    if not args.no_judge:
+        judge_provider, judge_model = judge_choice(args, model_name)
+        judge = _make(judge_provider, judge_model, "the judge (or pass --no-judge)")
+        if judge_provider in LOCAL_PROVIDERS and (judge_provider, judge_model) != (args.provider, model_name):
+            await judge.check()
+        judge_name = f"{judge_model} ({judge_provider})"
 
     started = datetime.now()
     run_dir = args.out / f"{suite.name}-{_slug(model_name)}-{started:%Y%m%d-%H%M%S}"
@@ -107,6 +121,14 @@ async def run(args: argparse.Namespace, console: Console) -> int:
     })
     console.print(f"[dim]results and traces: {run_dir}[/]")
     return 0 if all(a.passed for a in attempts) else 1
+
+
+def judge_choice(args: argparse.Namespace, model_name: str) -> tuple[str, str]:
+    """The judge's provider and model: the evaluated ones unless the flags say otherwise."""
+    provider = args.judge_provider or args.provider
+    if args.judge_model:
+        return provider, args.judge_model
+    return provider, model_name if provider == args.provider else DEFAULT_MODELS[provider]
 
 
 def _make(provider: str, name: str | None, role: str):

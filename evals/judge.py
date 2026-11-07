@@ -31,7 +31,8 @@ For each checklist item, decide whether the final answer satisfies it:
 - Be strict: an item that is only partly met fails.
 - Give a one-sentence reason for every verdict.
 
-Reply with only this JSON, one entry per item, in the checklist's order:
+Reply with only this JSON, one entry per item, in the checklist's order, and nothing before or \
+after it:
 {"items": [{"pass": true or false, "reason": "..."}]}"""
 
 
