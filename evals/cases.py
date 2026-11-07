@@ -3,7 +3,8 @@
     [suite]
     name = "permtracker"
     today = "2026-11-07"                  # the date the system prompt states, so fixtures stay true
-    tools = ["perm", "perm_keyed", "web"] # perm, perm_keyed, regulations, calculators, web
+    tools = ["perm", "perm_keyed", "web"] # perm, perm_keyed, regulations, federal_register,
+                                          # calculators, web
 
     [defaults.web_search]                 # what a tool returns when a case doesn't say
     output = "..."
@@ -38,7 +39,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-TOOL_GROUPS = {"perm", "perm_keyed", "regulations", "calculators", "web"}
+TOOL_GROUPS = {"perm", "perm_keyed", "regulations", "federal_register", "calculators", "web"}
 SPLITS = {"dev", "held_out"}
 CASE_KEYS = {
     "id", "split", "question", "must_call", "must_not_call", "call_order", "no_tools",

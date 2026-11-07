@@ -15,6 +15,7 @@ from runtime.messages import ToolCall
 from runtime.migrate import migrate
 from runtime.model import ModelError, ModelReply
 from runtime.calculator_tools import calculator_tools
+from runtime.federal_register_tools import federal_register_tools
 from runtime.regulation_tools import regulation_tools
 from runtime.tools import Tool
 from tests.fake_model import FakeModel, call, say
@@ -140,7 +141,8 @@ def test_without_a_service_key_only_the_keyless_perm_tools_are_given(tmp_path, m
     _use_model(monkeypatch, model)
     _run(tmp_path, ["--no-web"], ["hi"])
     request = model.requests[0]
-    perm = {t.name for t in request.tools} - {t.name for t in calculator_tools() + regulation_tools()}
+    others = calculator_tools() + regulation_tools() + federal_register_tools()
+    perm = {t.name for t in request.tools} - {t.name for t in others}
     assert perm == {"match_employer", "find_soc_code", "immigration_data_page"}
     assert "match_employer" in request.system and "perm_case_status" not in request.system
 
