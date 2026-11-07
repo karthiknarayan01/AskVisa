@@ -30,8 +30,9 @@ def make_log(tmp_path) -> EventLog:
     return EventLog(db)
 
 
-def parse_sse(text: str) -> list[tuple[str, dict]]:
-    """The events in an SSE body, skipping comment lines (pings)."""
+def parse_sse(text: str, keep_ids: bool = False) -> list[tuple[str, dict]]:
+    """The events in an SSE body, skipping comment lines (pings). request_id is dropped unless
+    keep_ids, so tests about other fields can compare whole events."""
     events = []
     for block in text.split("\n\n"):
         lines = [line for line in block.split("\n") if line and not line.startswith(":")]
@@ -39,7 +40,10 @@ def parse_sse(text: str) -> list[tuple[str, dict]]:
             continue
         kind = next(line[len("event: "):] for line in lines if line.startswith("event: "))
         data = next(line[len("data: "):] for line in lines if line.startswith("data: "))
-        events.append((kind, json.loads(data)))
+        payload = json.loads(data)
+        if not keep_ids:
+            payload.pop("request_id", None)
+        events.append((kind, payload))
     return events
 
 

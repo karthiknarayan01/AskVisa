@@ -130,7 +130,7 @@ class Turns:
                 wire = to_wire(item, session.state)
                 if wire is not None:
                     yield sse(*wire)
-            yield sse("end", end_event(task))
+            yield sse("end", {**end_event(task), "request_id": session.state.request_id})
         finally:
             events.close()
 

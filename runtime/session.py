@@ -41,6 +41,7 @@ StreamDelta items; they are never written to the log, which records the complete
 from __future__ import annotations
 
 import asyncio
+import uuid
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
@@ -158,10 +159,13 @@ class Session:
         return self.state.turn_open
 
     async def run_turn(self, user_text: str) -> TurnResult:
-        """Run one turn: until the model answers without tools, or the user stops it."""
+        """Run one turn: until the model answers without tools, or the user stops it.
+
+        The turn gets a new request_id, which every event it records carries.
+        """
         if self.state.turn_open:
             raise TurnInProgress("the previous turn was interrupted; call resume() first")
-        self._record("user_message", {"text": user_text})
+        self._record("user_message", {"text": user_text}, request_id=str(uuid.uuid4()))
         return await self._continue_turn()
 
     async def resume(self) -> TurnResult | None:
@@ -365,8 +369,12 @@ class Session:
         last_text = next(m.text for m in reversed(self.state.messages) if m.role == "assistant")
         return TurnResult(last_text, denied_call=denied)
 
-    def _record(self, type: str, payload: dict[str, Any]) -> None:
-        """Append the event (durable once this returns), fold it into the state, publish it."""
-        event = self.log.append(self.session_id, type, payload)
+    def _record(self, type: str, payload: dict[str, Any], request_id: str | None = None) -> None:
+        """Append the event (durable once this returns), fold it into the state, publish it.
+
+        The event carries `request_id` when given (a new turn's user message), else the current
+        turn's, so a turn resumed after a crash keeps its id.
+        """
+        event = self.log.append(self.session_id, type, payload, request_id or self.state.request_id)
         apply(self.state, event)
         self._hub.publish(event)

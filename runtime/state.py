@@ -73,6 +73,7 @@ class SessionState:
     approved_tools: set[str] = field(default_factory=set)  # approved for the rest of the session
     turn_open: bool = False
     turn_request: str = ""  # the user message that started the current or last turn
+    request_id: str | None = None  # the id of the current or last turn
     measured_tokens: int | None = None
     measured_through: int = 0
     last_seq: int = 0
@@ -114,6 +115,7 @@ def _on_user_message(state: SessionState, event: Event) -> None:
     state.messages.append(Message(role="user", text=event.payload["text"]))
     state.turn_open = True
     state.turn_request = event.payload["text"]
+    state.request_id = event.request_id
 
 
 def _on_assistant_message(state: SessionState, event: Event) -> None:

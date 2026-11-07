@@ -28,7 +28,8 @@ def test_messages_and_tool_events():
     state = SessionState()
     call = ToolCall("c1", "web_search", {"query": "H-1B"})
     state.tool_calls["c1"] = ToolCallState(call=call)
-    assert to_wire(event("user_message", text="q"), state) == ("user_message", {"text": "q"})
+    assert to_wire(Event("s", 1, "user_message", {"text": "q"}, "t", "r-1"), state) == (
+        "user_message", {"text": "q", "request_id": "r-1"})
     kind, data = to_wire(event("assistant_message", text="", reasoning="r",
                                tool_calls=[{"id": "c1", "name": "web_search", "arguments": {"query": "H-1B"}, "arguments_error": None}],
                                usage={"input_tokens": 5, "output_tokens": 2}), state)
