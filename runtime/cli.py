@@ -62,6 +62,7 @@ from runtime.terminal_input import Interrupted, Terminal
 from runtime.tools import Tool, ToolRegistry
 from runtime.calculator_tools import calculator_tools
 from runtime.permtracker_tools import permtracker_tools
+from runtime.regulation_tools import regulation_tools
 from runtime.web_tools import web_tools
 
 DEFAULT_DB = "agent.db"
@@ -188,9 +189,9 @@ def make_chat(args: argparse.Namespace, console: Console, read, log: EventLog) -
 
 
 def agent_tools(web: bool) -> list[Tool]:
-    """The tools the agent gets: the PERM Tracker tools, the date calculators, and the web tools
-    unless turned off."""
-    return permtracker_tools() + calculator_tools() + (web_tools() if web else [])
+    """The tools the agent gets: the PERM Tracker tools, the regulations, the date calculators,
+    and the web tools unless turned off."""
+    return permtracker_tools() + regulation_tools() + calculator_tools() + (web_tools() if web else [])
 
 
 def show_welcome(chat: Chat) -> None:
