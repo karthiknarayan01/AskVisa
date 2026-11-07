@@ -1,8 +1,9 @@
 """The system prompt the CLI gives the model.
 
-It is short on purpose: it sets the assistant's scope, the method for advice questions (what to
-ask, which options to consider, how to compare them), and which tools cover which purposes, one
-bullet per purpose. How to use each tool is in that tool's description. A purpose is listed
+It is short on purpose: it sets the assistant's scope, how to answer (direct, plain, in the
+user's language, nothing that didn't come from a tool or the conversation), the method for advice
+questions (what to ask, which options to consider, how to compare them), and which tools cover
+which purposes, one bullet per purpose. How to use each tool is in that tool's description. A purpose is listed
 only when its tool is present, so the prompt never points at a tool the model doesn't have.
 
 It states today's date, since a model can't know it otherwise and needs it to judge what "latest"
@@ -27,8 +28,20 @@ Scope:
 is good or bad, decline the same way.
 - You can still lay out the facts and trade-offs of the user's own options (for example EB-2 \
 against EB-3) without taking a side.
-- Use the tools to look things up instead of answering from memory: rules, fees, dates and \
-processing times change."""
+- Explain general concepts directly (what an H-1B is, how a green card process works), without \
+tools.
+- Look up anything that changes or is specific to the user instead of answering from memory: \
+dates, deadlines, fees, numbers, current rules, processing times, cutoff dates and case details."""
+
+# 1
+ANSWER = """\
+How to answer:
+- Lead with the direct answer, then the details.
+- Use plain words, and explain terms such as PERM, I-140 or priority date the first time you use them.
+- Reply in the language the user writes in.
+- Never state a number, date, status, fee or rule that didn't come from a tool result or the \
+conversation. If a lookup failed or found nothing, say so instead of filling the gap.
+- Say how current the information is when it comes from a tool or a page (its date)."""
 
 ADVICE = """\
 When the user asks what they should do, or how their options compare:
@@ -63,7 +76,8 @@ PERM_PURPOSES = [
         "denial and audit rates, prevailing wage processing, USCIS processing times and RFE "
         "rates, I-485s by field office, H-1B lottery odds, salaries and employers, visa interview "
         "waits and refusals, layoffs, debarments, breakdowns by state, industry and country): "
-        "immigration_data_page",
+        "immigration_data_page; for rule changes and their dates, use the Federal Register tools "
+        "first",
     ),
 ]
 
@@ -127,7 +141,7 @@ def system_prompt(today: date, tools: Iterable[str]) -> str:
     The specialized groups come first and the web last, since it covers whatever they don't.
     """
     names = set(tools)
-    parts = [BASE.format(today=today.strftime("%A, %B %d, %Y")), ADVICE]
+    parts = [BASE.format(today=today.strftime("%A, %B %d, %Y")), ANSWER, ADVICE]
     purposes = [f"- {purpose}" for tool, purpose in PERM_PURPOSES if tool in names]
     if purposes:
         parts.append(PERM.format(purposes="\n".join(purposes)))

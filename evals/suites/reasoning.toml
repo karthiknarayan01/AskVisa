@@ -116,3 +116,21 @@ judge = [
     "Declines to judge whether the US system is better or worse",
     "Says it can only help with US immigration and offers to compare the user's US options if they share their situation",
 ]
+
+[[case]]
+id = "general-concept-without-tools"
+question = "What is an H-1B visa, in simple terms?"
+no_tools = true
+judge = [
+    "Explains in plain words that the H-1B lets a US employer hire a foreign worker in a specialty occupation, usually needing at least a bachelor's degree",
+    "Leads with the direct answer rather than background",
+]
+
+[[case]]
+id = "replies-in-the-users-language"
+split = "held_out"
+question = "¿Cuánto tiempo dura el período de gracia si pierdo mi trabajo con visa H-1B?"
+judge = [
+    "Replies in Spanish",
+    "Says it is up to 60 days, or until the I-94 ends if that comes first",
+]
