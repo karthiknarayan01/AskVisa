@@ -116,3 +116,12 @@ async def test_suite_runs_each_case_repeat_times_in_case_order(tmp_path):
     assert len(seen) == 4 and len({a.session_id for a in attempts}) == 4
     with EventLog(db) as log:
         assert all(log.has_session(a.session_id) for a in attempts)
+
+
+async def test_calculators_compute_for_real_unless_a_fixture_is_given():
+    suite = Suite(name="calc", today=date(2026, 11, 7), tools=("calculators",), defaults={}, cases=())
+    real = fixture_registry(suite, Case("c", "q"))
+    computed = await real.run(ToolCall("1", "date_math", {"operation": "add_days", "start": "2026-11-07", "days": 1}))
+    assert computed.output == "2026-11-08 (Sunday) is 1 days after 2026-11-07"
+    faked = fixture_registry(suite, Case("c", "q", fixtures={"date_math": Fixture(error="boom")}))
+    assert (await faked.run(ToolCall("2", "date_math", {"operation": "add_days", "start": "2026-11-07", "days": 1}))).is_error
