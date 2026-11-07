@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from evals.cases import Case, Fixture, Suite
+from runtime.calculator_tools import calculator_tools
 from runtime.permtracker_tools import DataLookupError, PermTrackerClient, permtracker_tools
 from runtime.tools import Tool, ToolRegistry
 from runtime.web_tools import web_tools
@@ -31,6 +32,8 @@ def real_tools(groups: tuple[str, ...]) -> list[Tool]:
     if "perm" in groups or "perm_keyed" in groups:
         key = "eval" if "perm_keyed" in groups else ""
         tools += permtracker_tools(PermTrackerClient(api_key=key), read_page=lambda url: "")
+    if "calculators" in groups:
+        tools += calculator_tools()
     if "web" in groups:
         tools += web_tools(client=object())
     return tools

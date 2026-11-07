@@ -67,3 +67,15 @@ def test_each_purpose_is_its_own_bullet_and_only_for_tools_present():
 def test_web_section_lists_when_to_use_it_as_bullets():
     prompt = system_prompt(TODAY, WEB)
     assert "\n- when no other tool covers the question\n- when a tool returned nothing useful" in prompt
+
+
+CALCULATORS = ["opt_unemployment_days", "grace_period_end", "max_stay_end", "naturalization_filing_date", "date_math"]
+
+
+def test_calculators_have_their_own_section_before_the_web():
+    prompt = system_prompt(TODAY, LOOKUPS + CALCULATORS + WEB)
+    section = next(p for p in prompt.split("\n\n") if p.startswith("Date calculators"))
+    assert all(f": {name}" in section for name in CALCULATORS)
+    assert "Never work out a date or a count of days yourself" in prompt
+    assert prompt.index("match_employer") < prompt.index("Date calculators") < prompt.index("web_search")
+    assert "Date calculators" not in system_prompt(TODAY, LOOKUPS + WEB)
