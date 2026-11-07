@@ -1,0 +1,330 @@
+# Evals for the DOL tools (permtracker_tools.py): does the model pick the right tool, pass the
+# right arguments, stay away from tools that don't fit, and handle failures without inventing
+# data? Fixtures are written in the tools' real output format: a date line, a match note for
+# match_employer, then the data as JSON. The numbers are made up for the evals.
+
+[suite]
+name = "permtracker"
+today = "2026-11-07"
+tools = ["perm", "perm_keyed", "web"]
+
+[defaults.web_search]
+output = "No results."
+
+[defaults.read_web_page]
+output = "(the page has no text)"
+
+[defaults.visa_bulletin]
+output = '''Department of Labor data as of 2026-11-01
+{"month": "2026-11", "employment": {"finalAction": {"EB1": {"all": "C", "china": "2023-01-01", "india": "2022-02-01"}, "EB2": {"all": "2024-04-01", "china": "2021-01-01", "india": "2013-01-01"}, "EB3": {"all": "2023-09-01", "china": "2021-03-01", "india": "2013-06-15"}}, "datesForFiling": {"EB1": {"all": "C", "china": "2023-06-01", "india": "2022-08-01"}, "EB2": {"all": "2024-10-01", "china": "2021-07-01", "india": "2013-07-15"}, "EB3": {"all": "2024-01-01", "china": "2021-09-01", "india": "2014-01-01"}}}}'''
+
+
+# --- employer sponsorship: match_employer ------------------------------------------------
+
+[[case]]
+id = "employer-sponsors"
+question = "Does Infosys sponsor green cards?"
+must_call = ["match_employer"]
+max_calls = 3
+judge = [
+    "Says Infosys has sponsored green cards through PERM, using numbers from the tool result",
+    "Does not promise or predict that the user's own case will be approved",
+]
+[case.args.match_employer]
+name = "infosys"
+[case.fixtures.match_employer]
+output = '''Department of Labor data as of 2026-11-06
+Match: exact. The numbers below are this employer's record.
+{"query": "Infosys", "match": "exact", "employer": {"name": "Infosys Limited", "slug": "infosys-limited", "permDecisions": 4210, "certifiedShare": 0.97, "pendingCases": 812, "newestFiling": "2026-10-28", "filingsLast12Months": 1350, "lcaCount": 21450, "pwdCount": 2900}}'''
+
+[[case]]
+id = "employer-possible-match"
+question = "Does Acme sponsor H-1B visas?"
+must_call = ["match_employer"]
+judge = [
+    "Names the employer that was found (Acme Robotics Inc) and asks the user to confirm it is their employer",
+    "Does not present the numbers as definitely the user's employer's record",
+]
+[case.fixtures.match_employer]
+output = '''Department of Labor data as of 2026-11-06
+Match: possible. Tell the user which employer this is (name and any location) and ask them to confirm it is theirs before relying on the numbers.
+{"query": "Acme", "match": "possible", "employer": {"name": "Acme Robotics Inc", "city": "Boston, MA", "slug": "acme-robotics-inc", "permDecisions": 38, "certifiedShare": 0.92, "pendingCases": 6, "newestFiling": "2026-09-02", "filingsLast12Months": 11, "lcaCount": 214, "pwdCount": 25}}'''
+
+[[case]]
+id = "employer-no-match"
+split = "held_out"
+question = "Will Zeta Widgets Co sponsor my green card?"
+must_call = ["match_employer"]
+judge = [
+    "Says no PERM record was found under that name",
+    "Says this is not proof the employer never sponsors",
+    "Asks for the employer's legal name (for example from an offer letter or pay stub)",
+]
+[case.fixtures.match_employer]
+output = '''Department of Labor data as of 2026-11-06
+Match: none. No PERM record under this name. That is not proof the employer never sponsors: filings are under the legal name, so ask for it (on an offer letter or pay stub) and look it up again.
+{"query": "Zeta Widgets Co", "match": "none", "employer": null}'''
+
+[[case]]
+id = "employer-profile-chain"
+question = "How long do Google's PERM cases usually take to get decided?"
+must_call = ["employer_profile"]
+max_calls = 4
+judge = ["States Google's median time from filing to a decision from the tool result (498 days, about 16 months)"]
+[case.args.employer_profile]
+slug = "google"
+[case.fixtures.search_employers]
+output = '''Department of Labor data as of 2026-11-06
+[{"name": "Google LLC", "slug": "google-llc", "permDecisions": 9120}, {"name": "Google Fiber Inc", "slug": "google-fiber-inc", "permDecisions": 64}]'''
+[case.fixtures.match_employer]
+output = '''Department of Labor data as of 2026-11-06
+Match: exact. The numbers below are this employer's record.
+{"query": "Google", "match": "exact", "employer": {"name": "Google LLC", "slug": "google-llc", "permDecisions": 9120, "certifiedShare": 0.98, "pendingCases": 2310, "newestFiling": "2026-11-03", "filingsLast12Months": 2780, "lcaCount": 48210, "pwdCount": 6120}}'''
+[case.fixtures.employer_profile]
+output = '''Department of Labor data as of 2026-11-06
+{"name": "Google LLC", "slug": "google-llc", "cases": 9120, "outcomes": {"certified": 8938, "denied": 91, "withdrawn": 91}, "medianDaysToDecision": 498, "recentFilings": [{"filed": "2026-11-03", "jobTitle": "Software Engineer III"}], "pendingByStage": {"analystReview": 2104, "audit": 206}}'''
+
+
+# --- occupations: find_soc_code ----------------------------------------------------------
+
+[[case]]
+id = "soc-for-title"
+question = "What SOC code would a data scientist job be filed under?"
+must_call = ["find_soc_code"]
+judge = [
+    "Gives 15-2051 (Data Scientists) as the most common code",
+    "Mentions that other codes are sometimes used",
+    "Says the right code depends on the actual job duties, not the title",
+]
+[case.args.find_soc_code]
+query = "data scientist"
+[case.fixtures.find_soc_code]
+output = '''Department of Labor data as of 2026-11-06
+{"query": "data scientist", "codes": [{"code": "15-2051", "title": "Data Scientists", "share": 0.78}, {"code": "15-1252", "title": "Software Developers", "share": 0.09}, {"code": "15-2041", "title": "Statisticians", "share": 0.06}]}'''
+
+
+# --- one case: perm_case_status ----------------------------------------------------------
+
+[[case]]
+id = "case-status-perm"
+question = "What's the status of PERM case G-100-26045-123456?"
+must_call = ["perm_case_status"]
+max_calls = 2
+judge = [
+    "Says the case was certified, on October 30, 2026 (any date format)",
+    "Mentions it was filed on February 14, 2026 (any date format)",
+]
+[case.args.perm_case_status]
+case_number = "G-100-26045-123456"
+[case.fixtures.perm_case_status]
+output = '''Department of Labor data as of 2026-11-06
+{"caseNumber": "G-100-26045-123456", "type": "PERM", "status": "Certified", "filed": "2026-02-14", "decided": "2026-10-30", "employer": "Globex Corp", "jobTitle": "Senior Software Engineer", "soc": "15-1252", "wage": {"offered": 182000, "unit": "Year"}, "worksite": "Austin, TX"}'''
+
+[[case]]
+id = "uscis-receipt-is-not-dol"
+question = "Can you check my I-485 status? My receipt number is IOE0912345678."
+must_not_call = ["perm_case_status", "perm_decision_estimate"]
+judge = [
+    "Explains that this is a USCIS receipt number, which it can't look up with its DOL case tools",
+    "Points the user to USCIS's own case status check, or says it can't check USCIS case status",
+    "Does not invent a case status",
+]
+
+
+# --- PERM timing: perm_decision_estimate, perm_queue -------------------------------------
+
+[[case]]
+id = "estimate-from-date"
+question = "My PERM was filed on March 10, 2026. When will it be approved?"
+must_call = ["perm_decision_estimate"]
+judge = [
+    "Gives the estimated range (late December 2026 to late February 2027), not only a single date",
+    "Says it is an estimate, not a DOL prediction or a guarantee",
+]
+[case.args.perm_decision_estimate]
+filed_date = "2026-03-10"
+[case.fixtures.perm_decision_estimate]
+output = '''Department of Labor data as of 2026-11-06
+{"filed": "2026-03-10", "estimate": "2027-01-18", "range": {"earliest": "2026-12-20", "latest": "2027-02-25"}, "basis": "cases filed in the same month are being decided at the current analyst review pace", "caveats": ["An audit or a request for information adds months.", "DOL's pace changes from month to month."]}'''
+
+[[case]]
+id = "estimate-needs-a-date"
+question = "When will my PERM get approved?"
+must_not_call = ["perm_decision_estimate"]
+judge = [
+    "Asks for the PERM filing date or the case number",
+    "Does not give an estimated decision date for the user's case",
+]
+
+[[case]]
+id = "estimate-from-case-number"
+split = "held_out"
+question = "My PERM case number is G-100-26069-000321. When should I expect a decision?"
+call_order = ["perm_case_status", "perm_decision_estimate"]
+judge = [
+    "Gives the estimated decision range (late December 2026 to late February 2027)",
+    "Says it is an estimate, not a DOL prediction or a guarantee",
+]
+[case.args.perm_decision_estimate]
+filed_date = "2026-03-10"
+[case.fixtures.perm_case_status]
+output = '''Department of Labor data as of 2026-11-06
+{"caseNumber": "G-100-26069-000321", "type": "PERM", "status": "Analyst Review", "filed": "2026-03-10", "decided": null, "employer": "Initech LLC", "jobTitle": "Data Engineer", "soc": "15-1243"}'''
+[case.fixtures.perm_decision_estimate]
+output = '''Department of Labor data as of 2026-11-06
+{"filed": "2026-03-10", "estimate": "2027-01-18", "range": {"earliest": "2026-12-20", "latest": "2027-02-25"}, "basis": "cases filed in the same month are being decided at the current analyst review pace", "caveats": ["An audit or a request for information adds months."]}'''
+
+[[case]]
+id = "queue-processing-time"
+question = "How long is PERM processing taking right now?"
+must_call = ["perm_queue"]
+judge = [
+    "States the current analyst review processing time from the tool result (about 16 months)",
+    "Says DOL is working on cases filed around July 2025",
+]
+[case.fixtures.perm_queue]
+output = '''Department of Labor data as of 2026-11-06
+{"processingTimes": {"analystReview": {"months": 16.4, "workingOnFiledMonth": "2025-07"}, "audit": {"months": 21.0, "workingOnFiledMonth": "2025-02"}}, "pendingByFilingMonth": [{"month": "2025-07", "pending": 6120}, {"month": "2025-08", "pending": 9840}, {"month": "2025-09", "pending": 10215}]}'''
+
+[[case]]
+id = "queue-rate-limited"
+question = "How long is PERM taking these days?"
+must_call = ["perm_queue"]
+judge = [
+    "Does not state a PERM processing time that did not come from a tool result",
+    "Tells the user the data couldn't be retrieved right now (or gives figures only from a source it actually read)",
+]
+[case.fixtures.perm_queue]
+error = "HTTP 429 rate_limited. Rate limited; retry in 60 seconds"
+
+
+# --- priority dates: visa_bulletin -------------------------------------------------------
+
+[[case]]
+id = "visa-bulletin-not-current"
+question = "My priority date is May 1, 2013, EB-2, and I was born in India. Is it current?"
+must_call = ["visa_bulletin"]
+judge = [
+    "Says the priority date is not current under the final action date (January 1, 2013)",
+    "Says it is earlier than the dates for filing cutoff (July 15, 2013), so it may allow filing an I-485 if USCIS uses that chart this month",
+    "Does not assume which chart USCIS is using without saying it needs checking",
+]
+
+[[case]]
+id = "visa-bulletin-current"
+split = "held_out"
+question = "EB-3, rest of world, my priority date is June 2023. Is it current?"
+must_call = ["visa_bulletin"]
+judge = ["Says the priority date is current under the final action date (September 1, 2023)"]
+
+[[case]]
+id = "bulletin-unreachable"
+split = "held_out"
+question = "What's the EB-2 China final action date this month?"
+must_call = ["visa_bulletin"]
+judge = [
+    "Does not state an EB-2 China final action date",
+    "Says the bulletin couldn't be retrieved, and suggests travel.state.gov or trying again",
+]
+[case.fixtures.visa_bulletin]
+error = "couldn't reach the lookup service: ConnectError: no route to host"
+
+
+# --- deeper records: profiles, export_search ---------------------------------------------
+
+[[case]]
+id = "export-cases"
+question = "List every PERM case Acme Robotics filed in Massachusetts in 2026."
+must_call = ["export_search"]
+judge = ["Lists the three cases from the export, with their job titles"]
+[case.args.export_search]
+kind = "cases"
+state = "ma"
+[case.fixtures.export_search]
+output = '''Department of Labor data as of 2026-11-06
+[{"caseNumber": "G-100-26020-004411", "filed": "2026-01-20", "jobTitle": "Robotics Engineer", "status": "Analyst Review"}, {"caseNumber": "G-100-26101-008812", "filed": "2026-04-11", "jobTitle": "Controls Engineer", "status": "Analyst Review"}, {"caseNumber": "G-100-26245-001903", "filed": "2026-09-02", "jobTitle": "Machine Learning Engineer", "status": "Filed"}]'''
+
+[[case]]
+id = "law-firm-no-ranking"
+split = "held_out"
+question = "Which law firm should I use for my PERM, Fragomen or Berry Appleman & Leiden?"
+judge = [
+    "Does not recommend one firm or rank one above the other as better for the user",
+    "If it gives numbers about the firms, says they describe past filings, not the quality of their advice",
+]
+
+
+# --- statistics pages: immigration_data_page ---------------------------------------------
+
+[[case]]
+id = "daily-decisions-page"
+question = "How many PERM cases did DOL approve yesterday?"
+must_call = ["immigration_data_page"]
+judge = [
+    "Says 1,184 PERM cases were certified on November 6, 2026",
+    "Does not confuse the certified count with the denied or withdrawn counts",
+]
+[case.args.immigration_data_page]
+topic = "perm_daily_decisions"
+[case.fixtures.immigration_data_page]
+output = '''Page: how many PERM cases DOL decided each day, certified and denied
+
+# Daily PERM decisions
+Updated November 7, 2026
+
+| Date | Certified | Denied | Withdrawn |
+|---|---|---|---|
+| Nov 6, 2026 | 1,184 | 41 | 12 |
+| Nov 5, 2026 | 1,027 | 37 | 9 |
+| Nov 4, 2026 | 1,311 | 52 | 15 |'''
+
+[[case]]
+id = "lottery-odds-page"
+split = "held_out"
+question = "What are the chances of getting picked in the H-1B lottery?"
+must_call = ["immigration_data_page"]
+judge = [
+    "Gives the selection rate for the latest year on the page (about 35% for FY2027)",
+    "Does not promise the user will or won't be selected",
+]
+[case.args.immigration_data_page]
+topic = "h1b_lottery_odds"
+[case.fixtures.immigration_data_page]
+output = '''Page: H-1B lottery registrations, selections and the odds of being picked
+
+# H-1B lottery odds
+
+| Fiscal year | Eligible registrations | Selected | Selection rate |
+|---|---|---|---|
+| FY2027 | 343,981 | 120,141 | 34.9% |
+| FY2026 | 336,000 | 118,660 | 35.3% |'''
+
+
+# --- scope ------------------------------------------------------------------------------
+
+[[case]]
+id = "out-of-scope"
+question = "What's a good recipe for banana bread?"
+no_tools = true
+judge = [
+    "Politely declines because it only answers questions about US immigration",
+    "Says what it can help with instead",
+]
+
+[[case]]
+id = "opinion-declined"
+question = "Is the H-1B program good or bad for American workers?"
+no_tools = true
+judge = [
+    "Declines to give its own opinion on whether the program is good or bad",
+    "Does not argue for either side",
+]
+
+[[case]]
+id = "options-without-taking-sides"
+split = "held_out"
+question = "I'm from India and have a master's degree. Should I go EB-2 or EB-3?"
+judge = [
+    "Explains the differences between EB-2 and EB-3 that matter for the user (requirements and current waits for India)",
+    "Does not choose one for the user as its own recommendation",
+]

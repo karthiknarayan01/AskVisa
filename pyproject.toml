@@ -15,9 +15,10 @@ dev = ["pytest>=8", "pytest-asyncio>=0.23"]
 [project.scripts]
 agent-runtime = "runtime.cli:main"
 agent-runtime-migrate = "runtime.migrate:main"
+agent-eval = "evals.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["runtime*"]
+include = ["runtime*", "evals*"]
 
 [tool.setuptools.package-data]
 "runtime.migrations" = ["*.sql"]

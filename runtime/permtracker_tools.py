@@ -477,7 +477,7 @@ def match_employer(client: PermTrackerClient, name: str) -> str:
     return render(body, MATCH_NOTES.get(match) if isinstance(match, str) else None)
 
 
-class PermTrackerError(Exception):
+class DataLookupError(Exception):
     """An API call that failed, with what to do about it when there is something to do."""
 
 
@@ -495,11 +495,11 @@ class PermTrackerClient:
         try:
             response = self.http.get(BASE_URL + path, params=params, headers=headers)
         except httpx.TimeoutException:
-            raise PermTrackerError("the lookup didn't answer in time; try again shortly") from None
+            raise DataLookupError("the lookup didn't answer in time; try again shortly") from None
         except httpx.HTTPError as e:
-            raise PermTrackerError(f"couldn't reach the lookup service: {e}") from None
+            raise DataLookupError(f"couldn't reach the lookup service: {e}") from None
         if response.status_code >= 400:
-            raise PermTrackerError(_error_message(response))
+            raise DataLookupError(_error_message(response))
         try:
             return response.json()
         except ValueError:
