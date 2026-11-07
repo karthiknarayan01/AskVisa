@@ -88,3 +88,12 @@ def test_regulations_have_their_own_section_before_the_calculators():
     assert "quote the regulation and cite it" in prompt
     assert prompt.index("match_employer") < prompt.index("search_regulations") < prompt.index("Date calculators")
     assert "read_regulation" not in system_prompt(TODAY, LOOKUPS + WEB)
+
+
+def test_federal_register_has_its_own_section_before_the_calculators():
+    tools = LOOKUPS + ["read_regulation", "search_federal_register", "read_federal_register_document"] + CALCULATORS + WEB
+    prompt = system_prompt(TODAY, tools)
+    section = next(p for p in prompt.split("\n\n") if p.startswith("The Federal Register"))
+    assert "search_federal_register" in section and "read_federal_register_document" in section
+    assert "Say whether a rule is already in effect" in prompt
+    assert prompt.index("read_regulation") < prompt.index("The Federal Register") < prompt.index("Date calculators")

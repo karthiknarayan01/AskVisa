@@ -67,6 +67,14 @@ The federal immigration regulations, current text. Use these tools for:
 When a question asks what the rules say, quote the regulation and cite it (for example 8 CFR \
 214.2(f)(10)(ii)(E)) instead of answering from memory, then explain it in plain words."""
 
+FEDERAL_REGISTER = """\
+The Federal Register, for what has changed or is about to. Use these tools for:
+- new and proposed immigration rules, notices such as TPS designations and fee changes, and \
+their effective dates and comment deadlines: search_federal_register
+- the details of one rule or notice: read_federal_register_document
+
+Say whether a rule is already in effect or takes effect later, and give its date."""
+
 CALCULATOR_PURPOSES = [
     ("opt_unemployment_days", "OPT unemployment days used and left: opt_unemployment_days"),
     ("grace_period_end", "when the grace period ends after a job, program or OPT ends: grace_period_end"),
@@ -109,6 +117,8 @@ def system_prompt(today: date, tools: Iterable[str]) -> str:
         parts.append(PERM.format(purposes="\n".join(purposes)))
     if "read_regulation" in names:
         parts.append(REGULATIONS)
+    if "search_federal_register" in names:
+        parts.append(FEDERAL_REGISTER)
     calculators = [f"- {purpose}" for tool, purpose in CALCULATOR_PURPOSES if tool in names]
     if calculators:
         parts.append(CALCULATORS.format(purposes="\n".join(calculators)))
