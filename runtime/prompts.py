@@ -59,6 +59,21 @@ these tools for:
 Prefer the tools near the top of the list: they return exact records. immigration_data_page reads \
 a web page, so use it only when they don't cover the question, and use it before the web."""
 
+CALCULATOR_PURPOSES = [
+    ("opt_unemployment_days", "OPT unemployment days used and left: opt_unemployment_days"),
+    ("grace_period_end", "when the grace period ends after a job, program or OPT ends: grace_period_end"),
+    ("max_stay_end", "when an H-1B or L-1 worker reaches the maximum stay: max_stay_end"),
+    ("naturalization_filing_date", "when a green card holder can first file for citizenship: naturalization_filing_date"),
+    ("date_math", "any other count of days or date plus or minus days: date_math"),
+]
+
+CALCULATORS = """\
+Date calculators, for deadlines that depend on the user's own dates. Use them for:
+{purposes}
+
+Never work out a date or a count of days yourself: use a calculator, and ask for any date it \
+needs that the user hasn't given."""
+
 WEB = """\
 web_search and read_web_page cover everything the other tools don't. Use them:
 - when no other tool covers the question
@@ -84,6 +99,9 @@ def system_prompt(today: date, tools: Iterable[str]) -> str:
     purposes = [f"- {purpose}" for tool, purpose in PERM_PURPOSES if tool in names]
     if purposes:
         parts.append(PERM.format(purposes="\n".join(purposes)))
+    calculators = [f"- {purpose}" for tool, purpose in CALCULATOR_PURPOSES if tool in names]
+    if calculators:
+        parts.append(CALCULATORS.format(purposes="\n".join(calculators)))
     if "web_search" in names:
         parts.append(WEB)
     parts.append(END)

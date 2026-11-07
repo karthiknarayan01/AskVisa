@@ -14,6 +14,7 @@ from runtime.events import EventLog
 from runtime.messages import ToolCall
 from runtime.migrate import migrate
 from runtime.model import ModelError, ModelReply
+from runtime.calculator_tools import calculator_tools
 from runtime.tools import Tool
 from tests.fake_model import FakeModel, call, say
 
@@ -138,8 +139,18 @@ def test_without_a_service_key_only_the_keyless_perm_tools_are_given(tmp_path, m
     _use_model(monkeypatch, model)
     _run(tmp_path, ["--no-web"], ["hi"])
     request = model.requests[0]
-    assert {t.name for t in request.tools} == {"match_employer", "find_soc_code", "immigration_data_page"}
+    perm = {t.name for t in request.tools} - {t.name for t in calculator_tools()}
+    assert perm == {"match_employer", "find_soc_code", "immigration_data_page"}
     assert "match_employer" in request.system and "perm_case_status" not in request.system
+
+
+def test_the_date_calculators_are_given_to_the_model(tmp_path, monkeypatch):
+    model = FakeModel([say("ok")])
+    _use_model(monkeypatch, model)
+    _run(tmp_path, ["--no-web"], ["hi"])
+    names = {t.name for t in model.requests[0].tools}
+    assert {"date_math", "grace_period_end", "naturalization_filing_date"} <= names
+    assert "Never work out a date" in model.requests[0].system
 
 
 def test_with_a_service_key_every_perm_tool_is_given(tmp_path, monkeypatch):
