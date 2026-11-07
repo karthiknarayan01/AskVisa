@@ -1,0 +1,173 @@
+# Evals for the regulation tools (regulation_tools.py): does the model read the regulation
+# instead of answering from memory, pick the right section and title, quote and cite it, and
+# avoid quoting text it never received? Fixtures are in the tools' real output format; the rule
+# text in them is abridged from the actual regulations.
+
+[suite]
+name = "regulations"
+today = "2026-11-07"
+tools = ["regulations", "web"]
+
+[defaults.web_search]
+output = "No results."
+
+[defaults.read_web_page]
+output = "(the page has no text)"
+
+[defaults.search_regulations]
+output = '''8 CFR, current through 2026-11-05: 2 matching sections
+
+8 CFR 214.2: Special requirements for admission, extension, and maintenance of status.
+  F-1 status is dependent upon employment. Students may not accrue an aggregate of more than 90 days of unemployment
+
+8 CFR 214.1: Requirements for admission, extension, and maintenance of status.
+  for a period of up to 60 consecutive days or until the end of the authorized validity period, whichever is shorter'''
+
+
+# --- quoting the rule --------------------------------------------------------------------
+
+[[case]]
+id = "opt-unemployment-rule"
+question = "What exactly does the regulation say about unemployment while on OPT?"
+must_call = ["read_regulation"]
+judge = [
+    "Says post-completion OPT allows no more than 90 days of unemployment in total, quoting or closely following the regulation text",
+    "Cites 8 CFR 214.2(f)(10)(ii)(E)",
+    "Explains the rule in plain words as well as quoting it",
+]
+[case.args.read_regulation]
+section = "214.2"
+[case.fixtures.read_regulation]
+output = '''§ 214.2 Special requirements for admission, extension, and maintenance of status.
+8 CFR 214.2, from paragraph (f)(10)(ii)(E), current through 2026-11-05
+
+(E) Periods of unemployment. During post-completion OPT, F-1 status is dependent upon employment. Students may not accrue an aggregate of more than 90 days of unemployment during any post-completion OPT period described in 8 CFR 214.2(f)(10)(ii)(A)(3). Students granted a 24-month OPT extension under 8 CFR 214.2(f)(10)(ii)(C) may not accrue an aggregate of more than 150 days of unemployment during the total OPT period, including any post-completion OPT period described in 8 CFR 214.2(f)(10)(ii)(A)(3) and any subsequent 24-month extension period.'''
+
+[[case]]
+id = "grace-period-rule"
+question = "Where in the regulations is the 60-day grace period for H-1B workers, and what does it say exactly?"
+must_call = ["read_regulation"]
+judge = [
+    "Cites 8 CFR 214.1(l)(2)",
+    "Says it is up to 60 consecutive days or until the end of the authorized validity period, whichever is shorter",
+    "Says it is available once during each authorized validity period",
+]
+[case.args.read_regulation]
+section = "214.1"
+[case.fixtures.read_regulation]
+output = '''§ 214.1 Requirements for admission, extension, and maintenance of status.
+8 CFR 214.1, from paragraph (l)(2), current through 2026-11-05
+
+(2) An alien admitted or otherwise provided status in E-1, E-2, E-3, H-1B, H-1B1, L-1, O-1 or TN classification and his or her dependents shall not be considered to have failed to maintain nonimmigrant status solely on the basis of a cessation of the employment on which the alien's classification was based, for up to 60 consecutive days or until the end of the authorized validity period, whichever is shorter, once during each authorized validity period. DHS may eliminate or shorten this 60-day period as a matter of discretion.'''
+
+[[case]]
+id = "priority-date-retention"
+question = "If my employer withdraws my approved I-140, do I keep my priority date? What do the rules say?"
+must_call = ["read_regulation"]
+judge = [
+    "Says the priority date is generally kept for later petitions, based on the regulation text",
+    "Names at least one exception from the text (for example revocation for fraud or willful misrepresentation, or invalidation of the labor certification)",
+    "Cites 8 CFR 204.5(e)",
+]
+[case.args.read_regulation]
+section = "204.5"
+[case.fixtures.read_regulation]
+output = '''§ 204.5 Petitions for employment-based immigrants.
+8 CFR 204.5, from paragraph (e)(2), current through 2026-11-05
+
+(2) A petition approved on behalf of an alien under sections 203(b)(1), (2), or (3) of the Act accords the alien the priority date of the approved petition for any subsequently filed petition for any classification under section 203(b)(1), (2), or (3) of the Act for which the alien may qualify. In the event that the alien is the beneficiary of multiple approved petitions under section 203(b)(1), (2), or (3) of the Act, the alien shall be entitled to the earliest priority date. A petition revoked under sections 204(e) or 205 of the Act will not confer a priority date, nor will any priority date be established as a result of a denied petition. A priority date is not transferable to another alien. A priority date may not be retained if the approval of the petition is revoked because of: (i) fraud, or a willful misrepresentation of a material fact; (ii) revocation by the Department of Labor of the approved permanent labor certification; (iii) invalidation by USCIS or the Department of State of the permanent labor certification; or (iv) a determination by USCIS that petition approval was based on a material error.'''
+
+[[case]]
+id = "check-a-citation"
+question = "Is it true that 8 CFR 214.2(h)(13)(iii)(A) limits H-1B status to six years?"
+must_call = ["read_regulation"]
+judge = [
+    "Confirms from the regulation text that H-1B time is limited to six years",
+    "Mentions that time in H or L status counts toward it, or that the person must then spend a year outside the US",
+]
+[case.args.read_regulation]
+section = "214.2"
+paragraph = "(h)"
+[case.fixtures.read_regulation]
+output = '''§ 214.2 Special requirements for admission, extension, and maintenance of status.
+8 CFR 214.2, from paragraph (h)(13)(iii)(A), current through 2026-11-05
+
+(A) An H-1B alien in a specialty occupation or an H-1B fashion model who has spent six years in the United States under section 101(a)(15)(H) and/or (L) of the Act may not seek extension, change status, or be readmitted to the United States under section 101(a)(15)(H) or (L) of the Act unless the alien has resided and been physically present outside the United States, except for brief trips for business or pleasure, for the immediate prior year.'''
+
+[[case]]
+id = "perm-recruitment-dol-title"
+split = "held_out"
+question = "For PERM, what does the regulation require for newspaper advertising?"
+must_call = ["read_regulation"]
+judge = [
+    "Says two print advertisements are required, on two different Sundays, in a newspaper of general circulation in the area of intended employment",
+    "Cites 20 CFR 656.17(e)",
+]
+[case.args.read_regulation]
+section = "656.17"
+title = "20"
+[case.fixtures.read_regulation]
+output = '''§ 656.17 Basic labor certification process.
+20 CFR 656.17, from paragraph (e)(1)(i)(B), current through 2026-11-04
+
+(B) Placing an advertisement on two different Sundays in the newspaper of general circulation in the area of intended employment most appropriate to the occupation and the workers likely to apply for the job opportunity and most likely to bring the job opportunity to the attention of the largest number of likely applicants.'''
+
+[[case]]
+id = "stem-opt-total-rule"
+split = "held_out"
+question = "On a STEM OPT extension, how many unemployment days are allowed in total, according to the regulations?"
+must_call = ["read_regulation"]
+judge = [
+    "Says 150 days in total, including the days used during post-completion OPT, based on the regulation text",
+    "Cites 8 CFR 214.2(f)(10)(ii)(E)",
+]
+[case.args.read_regulation]
+section = "214.2"
+[case.fixtures.read_regulation]
+output = '''§ 214.2 Special requirements for admission, extension, and maintenance of status.
+8 CFR 214.2, from paragraph (f)(10)(ii)(E), current through 2026-11-05
+
+(E) Periods of unemployment. During post-completion OPT, F-1 status is dependent upon employment. Students may not accrue an aggregate of more than 90 days of unemployment during any post-completion OPT period. Students granted a 24-month OPT extension under 8 CFR 214.2(f)(10)(ii)(C) may not accrue an aggregate of more than 150 days of unemployment during the total OPT period, including any post-completion OPT period and any subsequent 24-month extension period.'''
+
+
+# --- failures ----------------------------------------------------------------------------
+
+[[case]]
+id = "ecfr-unreachable"
+question = "What does the regulation say about the H-1B 60-day grace period?"
+must_call = ["read_regulation"]
+judge = [
+    "Does not present any text as a quotation from the regulation",
+    "Says the regulation text couldn't be retrieved right now, or clearly marks any explanation as not taken from the regulation",
+]
+[case.fixtures.read_regulation]
+error = "couldn't reach the eCFR: ConnectError: no route to host"
+[case.fixtures.search_regulations]
+error = "couldn't reach the eCFR: ConnectError: no route to host"
+
+[[case]]
+id = "paragraph-not-found"
+split = "held_out"
+question = "Quote 8 CFR 214.2(f)(10)(ix) for me."
+must_call = ["read_regulation"]
+judge = [
+    "Says that paragraph wasn't found in the section",
+    "Does not make up text for the paragraph",
+]
+[case.fixtures.read_regulation]
+error = "paragraph (f)(10)(ix) not found in this section"
+
+
+# --- when not to use them ----------------------------------------------------------------
+
+[[case]]
+id = "processing-times-not-regulations"
+question = "How long is USCIS currently taking to process I-485 applications?"
+must_not_call = ["read_regulation", "search_regulations"]
+judge = ["Does not state a processing time that didn't come from a tool result"]
+
+[[case]]
+id = "out-of-scope"
+question = "What's the federal regulation on minimum wage for tipped workers?"
+no_tools = true
+judge = ["Politely declines because it only answers questions about US immigration"]
