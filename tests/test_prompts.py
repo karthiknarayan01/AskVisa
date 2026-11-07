@@ -79,3 +79,12 @@ def test_calculators_have_their_own_section_before_the_web():
     assert "Never work out a date or a count of days yourself" in prompt
     assert prompt.index("match_employer") < prompt.index("Date calculators") < prompt.index("web_search")
     assert "Date calculators" not in system_prompt(TODAY, LOOKUPS + WEB)
+
+
+def test_regulations_have_their_own_section_before_the_calculators():
+    prompt = system_prompt(TODAY, LOOKUPS + ["search_regulations", "read_regulation"] + CALCULATORS + WEB)
+    section = next(p for p in prompt.split("\n\n") if p.startswith("The federal immigration regulations"))
+    assert "search_regulations" in section and "read_regulation" in section
+    assert "quote the regulation and cite it" in prompt
+    assert prompt.index("match_employer") < prompt.index("search_regulations") < prompt.index("Date calculators")
+    assert "read_regulation" not in system_prompt(TODAY, LOOKUPS + WEB)

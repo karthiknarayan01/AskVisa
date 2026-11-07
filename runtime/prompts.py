@@ -59,6 +59,14 @@ these tools for:
 Prefer the tools near the top of the list: they return exact records. immigration_data_page reads \
 a web page, so use it only when they don't cover the question, and use it before the web."""
 
+REGULATIONS = """\
+The federal immigration regulations, current text. Use these tools for:
+- finding which section of the regulations holds a rule: search_regulations
+- quoting the exact text of a rule, and checking a citation: read_regulation
+
+When a question asks what the rules say, quote the regulation and cite it (for example 8 CFR \
+214.2(f)(10)(ii)(E)) instead of answering from memory, then explain it in plain words."""
+
 CALCULATOR_PURPOSES = [
     ("opt_unemployment_days", "OPT unemployment days used and left: opt_unemployment_days"),
     ("grace_period_end", "when the grace period ends after a job, program or OPT ends: grace_period_end"),
@@ -99,6 +107,8 @@ def system_prompt(today: date, tools: Iterable[str]) -> str:
     purposes = [f"- {purpose}" for tool, purpose in PERM_PURPOSES if tool in names]
     if purposes:
         parts.append(PERM.format(purposes="\n".join(purposes)))
+    if "read_regulation" in names:
+        parts.append(REGULATIONS)
     calculators = [f"- {purpose}" for tool, purpose in CALCULATOR_PURPOSES if tool in names]
     if calculators:
         parts.append(CALCULATORS.format(purposes="\n".join(calculators)))
