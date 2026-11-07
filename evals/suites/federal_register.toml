@@ -1,0 +1,168 @@
+# Evals for the Federal Register tools (federal_register_tools.py): does the model look up what
+# changed instead of answering from memory, say whether a rule is in effect yet, give comment
+# deadlines for proposed rules, read a document for details, and admit when nothing was found?
+# The regulation tools are included so "what changed" questions are checked against them.
+# Fixtures are in the tools' real output format; the documents in them are made up.
+
+[suite]
+name = "federal_register"
+today = "2026-11-07"
+tools = ["regulations", "federal_register", "web"]
+
+[defaults.web_search]
+output = "No results."
+
+[defaults.read_web_page]
+output = "(the page has no text)"
+
+[defaults.search_regulations]
+output = "8 CFR, current through 2026-11-05: no matching sections"
+
+[defaults.read_regulation]
+error = "no such section in the current regulations (HTTP 404)"
+
+
+# --- what changed: search_federal_register ------------------------------------------------
+
+[[case]]
+id = "h1b-rule-not-yet-in-effect"
+question = "Did the H-1B lottery rules change recently?"
+must_call = ["search_federal_register"]
+judge = [
+    "Says a final rule changes H-1B selection to a process weighted by wage level",
+    "Says the rule takes effect on January 15, 2027, so it is not in effect yet",
+]
+[case.fixtures.search_federal_register]
+output = '''1 Federal Register documents match, newest first:
+
+2026-09-30 · Final rule · U.S. Citizenship and Immigration Services, Homeland Security Department · document 2026-21456
+Weighted Selection in the H-1B Registration Process
+Effective 2027-01-15; 91 FR 61234
+DHS is amending its regulations so that H-1B cap registrations are selected with weights by the wage level of the offered job.
+https://www.federalregister.gov/documents/2026/09/30/2026-21456/weighted-selection'''
+
+[[case]]
+id = "fee-rule-already-in-effect"
+question = "When does the new USCIS fee rule take effect?"
+must_call = ["search_federal_register"]
+judge = ["Says the fee rule took effect on October 1, 2026, so it is already in effect"]
+[case.fixtures.search_federal_register]
+output = '''1 Federal Register documents match, newest first:
+
+2026-07-15 · Final rule · U.S. Citizenship and Immigration Services · document 2026-15520
+U.S. Citizenship and Immigration Services Fee Schedule Adjustments
+Effective 2026-10-01; 91 FR 44102
+USCIS is adjusting its fees for immigration benefit requests to recover its costs.
+https://www.federalregister.gov/d/2026-15520'''
+
+[[case]]
+id = "proposed-rule-comment-deadline"
+question = "Is there a proposed rule on OPT? Can I still comment on it?"
+must_call = ["search_federal_register"]
+judge = [
+    "Says it is a proposed rule, not in effect",
+    "Says comments can be submitted until December 19, 2026",
+]
+[case.fixtures.search_federal_register]
+output = '''1 Federal Register documents match, newest first:
+
+2026-10-20 · Proposed rule · U.S. Immigration and Customs Enforcement · document 2026-22001
+Practical Training for F-1 Students: Reporting Requirements
+Comments close 2026-12-19
+ICE proposes to change reporting requirements for students on optional practical training.
+https://www.federalregister.gov/d/2026-22001'''
+
+[[case]]
+id = "tps-extension-notice"
+split = "held_out"
+question = "Was TPS for Haiti extended?"
+must_call = ["search_federal_register"]
+judge = ["Says TPS for Haiti was extended through February 3, 2028, based on the notice"]
+[case.fixtures.search_federal_register]
+output = '''1 Federal Register documents match, newest first:
+
+2026-08-01 · Notice · U.S. Citizenship and Immigration Services · document 2026-16890
+Extension of the Designation of Haiti for Temporary Protected Status
+Effective 2026-08-04; 91 FR 48810
+The Secretary is extending the designation of Haiti for TPS for 18 months, through February 3, 2028.
+https://www.federalregister.gov/d/2026-16890'''
+
+[[case]]
+id = "nothing-found"
+question = "Is there a new rule about E-2 visas for Brazilian citizens?"
+must_call = ["search_federal_register"]
+judge = [
+    "Says no Federal Register rule or notice on this was found",
+    "Does not claim that such a rule exists",
+]
+[case.fixtures.search_federal_register]
+output = "No Federal Register documents match."
+
+
+# --- details: read_federal_register_document ----------------------------------------------
+
+[[case]]
+id = "read-the-rule-for-details"
+question = "What exactly does the H-1B weighted selection rule change? I want the details."
+call_order = ["search_federal_register", "read_federal_register_document"]
+judge = [
+    "Explains that registrations are weighted by wage level: level IV entered four times, level III three, level II two and level I once",
+    "Says the rule takes effect on January 15, 2027",
+]
+[case.args.read_federal_register_document]
+document_number = "2026-21456"
+[case.fixtures.search_federal_register]
+output = '''1 Federal Register documents match, newest first:
+
+2026-09-30 · Final rule · U.S. Citizenship and Immigration Services, Homeland Security Department · document 2026-21456
+Weighted Selection in the H-1B Registration Process
+Effective 2027-01-15; 91 FR 61234
+DHS is amending its regulations so that H-1B cap registrations are selected with weights by the wage level of the offered job.
+https://www.federalregister.gov/documents/2026/09/30/2026-21456/weighted-selection'''
+[case.fixtures.read_federal_register_document]
+output = '''2026-09-30 · Final rule · U.S. Citizenship and Immigration Services, Homeland Security Department · document 2026-21456
+Weighted Selection in the H-1B Registration Process
+Effective 2027-01-15; 91 FR 61234
+https://www.federalregister.gov/documents/2026/09/30/2026-21456/weighted-selection
+Dates: Effective January 15, 2027.
+
+SUMMARY: DHS is amending its regulations governing the selection of H-1B cap registrations. Each unique beneficiary will be entered into the selection pool according to the highest OEWS wage level the offered wage equals or exceeds: a beneficiary at wage level IV will be entered four times, level III three times, level II two times, and level I once. DATES: This rule is effective January 15, 2027, and applies to registrations for the fiscal year 2028 cap season and later.'''
+
+
+# --- failures ----------------------------------------------------------------------------
+
+[[case]]
+id = "federal-register-unreachable"
+split = "held_out"
+question = "Has there been any new rule on H-4 work permits?"
+must_call = ["search_federal_register"]
+judge = [
+    "Does not claim a specific new rule exists",
+    "Says it couldn't check the Federal Register right now",
+]
+[case.fixtures.search_federal_register]
+error = "couldn't reach the Federal Register: ConnectError: no route to host"
+
+
+# --- routing and scope -------------------------------------------------------------------
+
+[[case]]
+id = "recent-change-goes-to-the-federal-register"
+split = "held_out"
+question = "Did anything change this year in how USCIS charges fees for green card applications?"
+must_call = ["search_federal_register"]
+judge = ["Answers from the Federal Register result: the fee rule took effect on October 1, 2026"]
+[case.fixtures.search_federal_register]
+output = '''1 Federal Register documents match, newest first:
+
+2026-07-15 · Final rule · U.S. Citizenship and Immigration Services · document 2026-15520
+U.S. Citizenship and Immigration Services Fee Schedule Adjustments
+Effective 2026-10-01; 91 FR 44102
+USCIS is adjusting its fees for immigration benefit requests, including Form I-485, to recover its costs.
+https://www.federalregister.gov/d/2026-15520'''
+
+[[case]]
+id = "out-of-scope"
+question = "Are there any new EPA rules on car emissions?"
+no_tools = true
+judge = ["Politely declines because it only answers questions about US immigration"]
