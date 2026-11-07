@@ -51,4 +51,19 @@ def test_the_dol_tools_are_one_section_of_the_prompt():
 
 def test_the_order_is_record_tools_then_data_pages_then_the_web():
     prompt = system_prompt(TODAY, LOOKUPS + RECORDS + WEB)
-    assert "Use the record tools first when they cover a question, then immigration_data_page, then the web." in prompt
+    assert prompt.index("perm_case_status") < prompt.index("- published statistics") < prompt.index("web_search")
+    assert "use it only when they don't cover the question, and use it before the web" in prompt
+
+
+def test_each_purpose_is_its_own_bullet_and_only_for_tools_present():
+    keyless = system_prompt(TODAY, LOOKUPS)
+    assert "\n- whether and how often an employer sponsors" in keyless
+    assert "\n- which SOC occupation code fits a job" in keyless
+    assert "perm_case_status" not in keyless and "visa_bulletin" not in keyless
+    keyed = system_prompt(TODAY, LOOKUPS + RECORDS)
+    assert "\n- the status and details of a DOL case, by its case number: perm_case_status" in keyed
+
+
+def test_web_section_lists_when_to_use_it_as_bullets():
+    prompt = system_prompt(TODAY, WEB)
+    assert "\n- when no other tool covers the question\n- when a tool returned nothing useful" in prompt

@@ -73,142 +73,223 @@ MATCH_NOTES = {
 }
 
 MATCH_EMPLOYER = """\
-Look up an employer's track record of sponsoring green cards (PERM labor certification) and H-1B \
-visas (LCAs), from Department of Labor filings.
+Looks up an employer's record of sponsoring green cards (PERM labor certification) and H-1B visas \
+(LCAs), from Department of Labor filings.
 
-Use it when the user asks about a specific employer, for example:
-- "Does Acme sponsor green cards?" / "Will this company sponsor my H-1B?"
-- "How many PERM cases has Google filed? How many were certified or denied?"
-- "Is this employer still filing PERM cases?" (see the newest filing and filings in the last 12 months)
+Use it for questions about one employer, for example:
+- "Does Acme sponsor green cards?" or "Will this company sponsor my H-1B?"
+- "How many PERM cases has Google filed, and how many were certified or denied?"
+- "Is this employer still filing PERM cases?" (look at the newest filing and filings in the last 12 months)
 - comparing job offers by how often each employer sponsors
 
-Don't use it for the status of one case, processing times, visa bulletin dates or what the rules \
-say. Its numbers are the employer's history, not a prediction for the user's own case.
+Don't use it for:
+- the status of one case (use perm_case_status)
+- processing times, visa bulletin dates or what the rules say
 
-Returns: the match (exact, possible or none, with what to do for each), and for a match the \
-employer's PERM decisions, certified share, pending cases, newest filing, filings in the last 12 \
-months, and H-1B LCA and wage request counts. The first line gives the date of the data: \
-mention it when how current the numbers are matters."""
+How to use it:
+- Pass the employer's name as the user gave it.
+- The result says whether the match is exact, possible or none, and what to do for each.
+- The numbers are the employer's history, not a prediction for the user's own case.
+
+Returns:
+- the match, and for a match: PERM decisions, certified share, pending cases, newest filing, \
+filings in the last 12 months, and H-1B LCA and wage request counts
+- a first line with the date of the data: mention it when how current the numbers are matters"""
 
 FIND_SOC_CODE = """\
-Look up SOC occupation codes. A SOC code is the government's code for an occupation (e.g. 15-1252 \
-Software Developers); every PERM, prevailing wage and H-1B LCA filing is made under one, and with \
-the job's location and requirements it sets the minimum wage the employer must offer.
+Looks up SOC occupation codes. A SOC code is the government's code for an occupation (e.g. \
+15-1252, Software Developers). Every PERM, prevailing wage and H-1B LCA filing is made under one, \
+and with the job's location and requirements it sets the minimum wage the employer must offer.
 
-Use it when the user asks about an occupation rather than an employer, for example:
+Use it for questions about an occupation rather than an employer, for example:
 - "What SOC code would my job, data scientist, be filed under?"
 - "What does SOC 15-2051 cover, and which job titles are filed under it?"
 - "What's the median offered wage in PERM cases for software developers?"
 - "How often are PERM cases in my occupation approved?"
 - "My old filing used a 2010 SOC code; what is it now?"
 
-Pass a job title or a code. For a title it returns the codes employers filed it under, with how \
-often each was used: give the common ones, and say the right code depends on the actual duties, \
-not the title. For a code it returns its title, O*NET description and tasks, common filed titles, \
-PERM approval rate and median offered wage, and for a 2010 code the 2018 codes it became. Approval \
-rates and wages are history, not a prediction for the user's case. The first line gives the date \
-of the data: mention it when how current the numbers are matters."""
+How to use it:
+- Pass a job title or a SOC code.
+- A title can map to several codes: give the common ones, and say the right code depends on the \
+actual job duties, not the title.
+- Approval rates and wages are history, not a prediction for the user's case.
+
+Returns:
+- for a title: the codes employers filed it under, with how often each was used
+- for a code: its title, O*NET description and tasks, common filed titles, PERM approval rate and \
+median offered wage, and for a 2010 code the 2018 codes it became
+- a first line with the date of the data: mention it when how current the numbers are matters"""
 
 PERM_CASE_STATUS = """\
-Look up one Department of Labor case by its case number: its status, when it was filed, the \
-employer, and once decided, DOL's record of the decision (outcome, dates, job, wage, worksite).
+Looks up one Department of Labor case by its case number.
 
 Use it when the user gives a DOL case number, for example:
 - "What's the status of G-100-26045-123456?" (PERM cases start with G-100)
 - "Was my prevailing wage request P-100-… issued?" (wage requests start with P-100)
 - "Is LCA I-200-… certified?" (H-1B LCAs start with I-200)
-- H-2A, H-2B and CW-1 cases too, with workers, work period and worksite
+- H-2A, H-2B and CW-1 cases
 
-If the user wants a case's status but hasn't given the number, ask for it. USCIS receipt numbers \
-(three letters then ten digits, like IOE0912345678 or EAC2190012345) are not DOL cases: this tool \
-can't look those up. Set live to true only if a recent case number isn't found, to ask DOL \
-directly (limited to 200 a day)."""
+Don't use it for:
+- USCIS receipt numbers (three letters then ten digits, like IOE0912345678 or EAC2190012345): \
+those are not DOL cases and this tool can't look them up
+
+How to use it:
+- If the user wants a case's status but hasn't given the number, ask for it.
+- Set live to true only when a recent case number isn't found, to ask DOL directly (limited to \
+200 a day).
+
+Returns:
+- the status, filing date and employer
+- once decided, DOL's record of the decision: outcome, dates, job, wage and worksite"""
 
 PERM_DECISION_ESTIMATE = """\
-Estimate when the Department of Labor will decide a pending PERM case, from its filing date: a \
-likely date, a range and caveats.
+Estimates when the Department of Labor will decide a pending PERM case, from its filing date.
 
-Use it for "when will my PERM be approved?", "my PERM was filed in February 2026, how much longer?" \
-and similar. It needs the filing date: if the user gave a case number instead, call \
-perm_case_status first to get it; if they gave neither, ask. Say it is an estimate based on how \
-DOL has been processing cases, not a DOL prediction, and give the range, not just one date. \
-For a case that is already decided, use perm_case_status instead."""
+Use it for questions like:
+- "When will my PERM be approved?"
+- "My PERM was filed in February 2026; how much longer?"
+
+Don't use it for:
+- a case that is already decided (use perm_case_status)
+
+How to use it:
+- It needs the filing date. If the user gave a case number instead, call perm_case_status first \
+to get it; if they gave neither, ask.
+- Say it is an estimate based on how DOL has been processing cases, not a DOL prediction.
+- Give the range, not just one date.
+
+Returns:
+- a likely decision date, a range and caveats"""
 
 PERM_QUEUE = """\
 The Department of Labor's current PERM processing times, and how many PERM cases are pending for \
 each filing month.
 
-Use it for "how long is PERM taking right now?", "which filing month is DOL working on?", "how big \
-is the PERM backlog?", or to put the user's own filing date in context (how many cases filed \
-before theirs are still waiting). For one case's estimated decision date, use \
-perm_decision_estimate."""
+Use it for questions like:
+- "How long is PERM taking right now?"
+- "Which filing month is DOL working on?"
+- "How big is the PERM backlog?"
+- putting the user's own filing date in context: how many cases filed before theirs are still waiting
+
+Don't use it for:
+- one case's estimated decision date (use perm_decision_estimate)
+
+Returns:
+- current processing times, and pending cases by filing month"""
 
 VISA_BULLETIN = """\
-A month's State Department visa bulletin: the cutoff dates for employment-based (EB-1 to EB-5) \
-and family-based categories, by country of birth (all chargeability, China, India, Mexico, \
-Philippines), in both charts: final action dates and dates for filing.
+A month's State Department visa bulletin: the priority date cutoffs for green cards.
 
-Use it for "is my priority date current?", "what's the EB-2 India cutoff this month?", "how far \
-did EB-3 move since last month?" and similar. Pass month as YYYY-MM, or leave it out for the \
-newest bulletin; call it for two months to compare movement. A priority date is current when it \
-is earlier than the cutoff in the user's category and country ("C" means current for everyone). \
-Which chart applies to filing an I-485 is set by USCIS each month; say so rather than assuming."""
+Use it for questions like:
+- "Is my priority date current?"
+- "What's the EB-2 India cutoff this month?"
+- "How far did EB-3 move since last month?"
+
+How to use it:
+- Pass month as YYYY-MM, or leave it out for the newest bulletin.
+- To compare movement, call it for both months.
+- A priority date is current when it is earlier than the cutoff for the user's category and \
+country; "C" means current for everyone.
+- Which chart applies to filing an I-485 is set by USCIS each month: say so rather than assuming.
+
+Returns:
+- cutoff dates for the employment-based (EB-1 to EB-5) and family-based categories
+- by country of birth: all chargeability, China, India, Mexico, Philippines
+- both charts: final action dates and dates for filing"""
 
 SEARCH_EMPLOYERS = """\
-Search employers that have filed PERM cases, by name. Returns the matching employers, each with \
-the slug to pass to employer_profile.
+Searches employers that have filed PERM cases, by name.
 
-Use it when match_employer found no exact match and you want to see the candidates, or when the \
-user asks to browse employers ("which Acme entities file PERM?"). For a quick yes/no on one \
-employer's sponsorship, match_employer is enough."""
+Use it for:
+- seeing the candidates when match_employer found no exact match
+- browsing an employer's entities, e.g. "which Acme companies file PERM?"
+
+Don't use it for:
+- a quick yes or no on one employer's sponsorship (match_employer is enough)
+
+Returns:
+- matching employers, each with the slug to pass to employer_profile"""
 
 EMPLOYER_PROFILE = """\
-One employer's full PERM record: its cases and outcomes, median days from filing to a decision, \
-recent filings, and pending cases by stage.
+One employer's full PERM record.
 
-Use it after search_employers (or match_employer) gives you the employer's slug, for deeper \
-questions: "how long do Google's PERM cases take?", "what has Acme filed recently?", "how many of \
-their cases are pending, and at what stage?". The numbers are the employer's history, not a \
-prediction for the user's case."""
+Use it for deeper questions about one employer, for example:
+- "How long do Google's PERM cases take?"
+- "What has Acme filed recently?"
+- "How many of their cases are pending, and at what stage?"
+
+How to use it:
+- Get the slug from search_employers first.
+- The numbers are the employer's history, not a prediction for the user's case.
+
+Returns:
+- cases and outcomes, median days from filing to a decision, recent filings, and pending cases by stage"""
 
 SEARCH_LAW_FIRMS = """\
-Search immigration law firms that file PERM cases, by name. Returns matching firms, each with \
-the slug to pass to law_firm_profile.
+Searches immigration law firms that file PERM cases, by name.
 
-Use it when the user names their employer's law firm or asks about one ("how does Fragomen do on \
-PERM?")."""
+Use it for:
+- a law firm the user names, e.g. their employer's firm, or "how does Fragomen do on PERM?"
+
+Returns:
+- matching firms, each with the slug to pass to law_firm_profile"""
 
 LAW_FIRM_PROFILE = """\
-One law firm's PERM record (cases and outcomes) and its pending cases by stage.
+One law firm's PERM record.
 
-Use it after search_law_firms gives you the firm's slug. Its numbers describe the firm's past \
-filings, not the quality of its advice or the outcome of the user's case: never rank or \
-recommend firms from them."""
+Use it for:
+- questions about a law firm's PERM filings, after search_law_firms gives you its slug
+
+How to use it:
+- The numbers describe the firm's past filings, not the quality of its advice or the outcome of \
+the user's case: never rank or recommend firms from them.
+
+Returns:
+- cases and outcomes, and pending cases by stage"""
 
 SEARCH_OCCUPATIONS = """\
-Search occupations that PERM cases were filed under, by title. Returns matching occupations, \
-each with the slug to pass to occupation_profile.
+Searches occupations that PERM cases were filed under, by title.
 
-Use it to get from a job title to an occupation's PERM record. To find which SOC code a job \
-title is filed under, find_soc_code is more direct."""
+Use it for:
+- getting from a job title to an occupation's PERM record
+
+Don't use it for:
+- finding which SOC code a job title is filed under (find_soc_code is more direct)
+
+Returns:
+- matching occupations, each with the slug to pass to occupation_profile"""
 
 OCCUPATION_PROFILE = """\
-One occupation's PERM record: its SOC code, case outcomes, and the median offered wage.
+One occupation's PERM record.
 
-Use it after search_occupations gives you the slug, for "how are PERM cases for software \
-developers doing?" or "what do employers usually offer data scientists in PERM cases?". The \
-numbers are history, not a prediction for the user's case."""
+Use it for questions like:
+- "How are PERM cases for software developers doing?"
+- "What do employers usually offer data scientists in PERM cases?"
+
+How to use it:
+- Get the slug from search_occupations first.
+- The numbers are history, not a prediction for the user's case.
+
+Returns:
+- the SOC code, case outcomes and the median offered wage"""
 
 EXPORT_SEARCH = """\
-All the results of a search, past the first page, as JSON. kind is cases, employers, law-firms \
-or occupations; query searches by name. For cases you can also filter by law firm, worksite \
-state, occupation, filing date range and outcome.
+Returns all the results of a search, past the first page, as JSON.
 
-Use it only when a question needs the complete list, for example "every PERM case Acme filed in \
-California in 2026" or "all certified cases for software developers filed last March". For one \
-employer, firm or occupation, the search and profile tools are cheaper. Long results are clipped: \
-narrow the filters rather than asking for everything."""
+Use it only when a question needs the complete list, for example:
+- "Every PERM case Acme filed in California in 2026"
+- "All certified cases for software developers filed last March"
 
+Don't use it for:
+- one employer, firm or occupation (the search and profile tools are cheaper)
+
+How to use it:
+- kind is cases, employers, law-firms or occupations; query searches by name.
+- For cases you can also filter by law firm, worksite state, occupation, filing date range and outcome.
+- Long results are clipped: narrow the filters rather than asking for everything.
+
+Returns:
+- every matching record"""
 
 # topic -> (path, what the page shows). Only pages with data; the site's calculators run in the
 # browser, so their pages have no answers to read.
@@ -250,21 +331,29 @@ PAGES: dict[str, tuple[str, str]] = {
 }
 
 IMMIGRATION_DATA_PAGE = """\
-Read a published statistics page on US employment-based immigration, for data the other DOL tools \
-don't return. Pick the page by topic:
+Reads a published statistics page on US employment-based immigration, for data the other DOL \
+tools don't return.
 
+Pages, by topic:
 {topics}
 
-Use it when a question needs one of these and no other tool answers it: for example "how many \
-PERM cases were approved yesterday?" (perm_daily_decisions), "what are the odds in the H-1B \
-lottery?" (h1b_lottery_odds), "how long is USCIS taking on I-485s?" (uscis_processing_times), \
-"how long is the visa interview wait in Mumbai?" (visa_wait_times). Use perm_case_status, \
-perm_queue, visa_bulletin and the other DOL tools first when they cover the question: they return \
-exact records, while this returns the text of a web page. Use it before searching the web.
+Use it when one of these pages answers the question and no other tool does, for example:
+- "How many PERM cases were approved yesterday?" (perm_daily_decisions)
+- "What are the odds in the H-1B lottery?" (h1b_lottery_odds)
+- "How long is USCIS taking on I-485s?" (uscis_processing_times)
+- "How long is the visa interview wait in Mumbai?" (visa_wait_times)
 
-Returns the page's text (tables become text), up to 20,000 characters. Read the numbers from it \
-carefully, and say what date the page gives for its data. If the page doesn't hold the answer, \
-say so or try web_search."""
+Don't use it for:
+- anything perm_case_status, perm_queue, visa_bulletin or the other DOL tools cover: they return \
+exact records, while this returns the text of a web page
+
+How to use it:
+- Use it before searching the web.
+- Read the numbers carefully, and say what date the page gives for its data.
+- If the page doesn't hold the answer, say so or try web_search.
+
+Returns:
+- the page's text, with tables as text, up to 20,000 characters"""
 
 
 def permtracker_tools(

@@ -165,12 +165,12 @@ async def test_an_unknown_match_value_adds_no_note():
 
 def test_descriptions_say_when_to_use_each_tool_and_when_not_to():
     by_name = {t.name: t.description for t in permtracker_tools(PermTrackerClient(api_key="k"), NO_PAGES)}
-    assert all("Use it" in d for d in by_name.values())
+    assert all("\nUse it" in d and "\nReturns:\n- " in d for d in by_name.values())
     assert "USCIS receipt numbers" in by_name["perm_case_status"]
     assert "not a DOL prediction" in by_name["perm_decision_estimate"]
     assert "final action dates and dates for filing" in by_name["visa_bulletin"]
     assert "Does Acme sponsor green cards?" in by_name["match_employer"]
-    assert "Don't use it for the status of one case" in by_name["match_employer"]
+    assert "Don't use it for:\n- the status of one case" in by_name["match_employer"]
     assert "What SOC code would my job" in by_name["find_soc_code"]
     assert all("date of the data" in by_name[n] for n in ("match_employer", "find_soc_code"))
     assert "before searching the web" in by_name["immigration_data_page"]
