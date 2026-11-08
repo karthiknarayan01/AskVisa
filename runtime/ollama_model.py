@@ -16,6 +16,11 @@ Differences from the hosted providers, handled here:
   the same number is the window compaction works against (`context_window`).
 - Qwen 3.5 thinks before it answers (Ollama's `think`); the thinking streams as reasoning and
   is kept in the log, but isn't sent back, since Qwen doesn't expect earlier thinking.
+- Ollama unloads an idle model after 5 minutes, and with it the prompt it has already
+  processed, so the next question pays for loading the model and reading the whole prompt
+  again. Requests ask it to keep the model loaded (`keep_alive`, by default until Ollama
+  stops; `ollama stop <model>` frees the memory), and `check` loads it at startup, with the
+  same `num_ctx` as the chat requests, since a different one makes Ollama reload the model.
 """
 
 from __future__ import annotations
@@ -39,6 +44,7 @@ from runtime.model import (
 
 DEFAULT_MODEL = "qwen3.5:9b"
 DEFAULT_CONTEXT_WINDOW = 32_768
+KEEP_LOADED = -1  # Ollama's keep_alive: a negative value keeps the model loaded until Ollama stops
 
 
 class OllamaModel:
@@ -47,18 +53,26 @@ class OllamaModel:
         model: str = DEFAULT_MODEL,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         context_window: int = DEFAULT_CONTEXT_WINDOW,
+        keep_alive: float | str = KEEP_LOADED,
         client: Any = None,
     ):
-        """`client` defaults to ollama.AsyncClient(), which honours OLLAMA_HOST."""
+        """`client` defaults to ollama.AsyncClient(), which honours OLLAMA_HOST. `keep_alive` is
+        how long Ollama keeps the model loaded after a request ("30m", seconds, or negative for
+        until Ollama stops)."""
         self._model = model
         self._max_tokens = max_tokens
         self.context_window = context_window
+        self._keep_alive = keep_alive
         self._client = client or ollama.AsyncClient()
 
     async def check(self) -> None:
-        """Fail early, with what to do, if Ollama isn't running or the model isn't downloaded."""
+        """Fail early, with what to do, if Ollama isn't running or the model isn't downloaded;
+        otherwise load the model, so the first question doesn't wait for it."""
         try:
             await self._client.show(self._model)
+            await self._client.chat(
+                model=self._model, messages=[], keep_alive=self._keep_alive, options=self._options()
+            )
         except ollama.ResponseError as e:
             if e.status_code == 404:
                 raise ModelError(
@@ -93,7 +107,8 @@ class OllamaModel:
                     for t in tools
                 ] or None,
                 stream=True,
-                options={"num_ctx": self.context_window, "num_predict": self._num_predict()},
+                keep_alive=self._keep_alive,
+                options=self._options(),
             )
             async for chunk in stream:
                 assembler.add(chunk)
@@ -104,6 +119,10 @@ class OllamaModel:
         except httpx.HTTPError as e:
             raise ModelError(f"Ollama connection failed: {e}") from None
         return assembler.reply()
+
+    def _options(self) -> dict[str, int]:
+        """The model options, the same on every request: a different num_ctx reloads the model."""
+        return {"num_ctx": self.context_window, "num_predict": self._num_predict()}
 
     def _num_predict(self) -> int:
         """The output cap, kept to half the window so a reply can't crowd out its own prompt."""

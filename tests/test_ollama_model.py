@@ -76,6 +76,7 @@ async def test_request_sets_the_window_the_output_cap_and_the_tools():
     request = client.requests[0]
     assert request["model"] == DEFAULT_MODEL
     assert request["stream"] is True
+    assert request["keep_alive"] == -1
     assert request["options"] == {"num_ctx": 16384, "num_predict": 4000}
     assert request["tools"] == [{
         "type": "function",
@@ -144,8 +145,16 @@ async def test_connection_refused_says_to_start_ollama():
         await OllamaModel(client=client).complete("sys", [], [])
 
 
-async def test_check_passes_when_the_model_is_there():
-    await OllamaModel(client=FakeClient()).check()
+async def test_check_loads_the_model_with_the_chat_requests_options():
+    client = FakeClient([chunk(done=True, done_reason="stop")])
+    model = OllamaModel(context_window=16384, keep_alive="30m", client=client)
+    await model.check()
+    await model.complete("sys", [Message("user", "hi")], [])
+
+    load, question = client.requests
+    assert load["messages"] == [] and load["keep_alive"] == "30m"
+    assert load["options"] == question["options"]
+    assert question["keep_alive"] == "30m"
 
 
 async def test_check_says_how_to_download_a_missing_model():
