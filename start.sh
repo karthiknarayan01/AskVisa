@@ -3,7 +3,7 @@
 #
 #   ./start.sh                 first run: install, choose a model, then serve; later runs: serve
 #   ./start.sh --setup         choose the model again
-#   ./start.sh --port 9000     any other arguments are passed to agent-server
+#   ./start.sh --port 9000     any other arguments are passed to askvisa-server
 #
 # First run:
 #   1. creates .venv next to this script and installs the package (again whenever
@@ -12,7 +12,7 @@
 #   2. asks which model to use: Qwen on this computer (through Ollama), Anthropic or DeepSeek
 #   3. local: installs Ollama if it's missing (after asking), starts it, downloads the model
 #      hosted: asks for the API key unless it is already in the environment
-#   4. saves the choice to ~/.config/agent-runtime/config (readable only by you)
+#   4. saves the choice to ~/.config/askvisa/config (readable only by you)
 #
 # Service keys the tools use (PERMTRACKER_API_KEY) are read from a .env file next to this script
 # when it exists, as KEY=value lines; it is git-ignored and never asked for.
@@ -25,7 +25,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/setup.sh
 source "$ROOT/scripts/setup.sh"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/agent-runtime"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/askvisa"
 CONFIG="$CONFIG_DIR/config"
 
 PROVIDER=""
@@ -133,13 +133,13 @@ launch() {
     [[ -n "$ANTHROPIC_KEY" && -z "${ANTHROPIC_API_KEY:-}" ]] && export ANTHROPIC_API_KEY="$ANTHROPIC_KEY"
     [[ -n "$DEEPSEEK_KEY" && -z "${DEEPSEEK_API_KEY:-}" ]] && export DEEPSEEK_API_KEY="$DEEPSEEK_KEY"
     open_browser_when_ready "$@"
-    exec "$VENV/bin/agent-server" --provider "$PROVIDER" --model "$MODEL" "$@"
+    exec "$VENV/bin/askvisa-server" --provider "$PROVIDER" --model "$MODEL" "$@"
 }
 
 open_browser_when_ready() {
     # Open the app in the browser once the server answers. Skipped without a browser opener,
-    # or when AGENT_RUNTIME_NO_BROWSER is set.
-    [[ -z "${AGENT_RUNTIME_NO_BROWSER:-}" ]] || return 0
+    # or when ASKVISA_NO_BROWSER is set.
+    [[ -z "${ASKVISA_NO_BROWSER:-}" ]] || return 0
     local opener="" port=8000 previous=""
     command -v open >/dev/null 2>&1 && [[ "$(uname)" == "Darwin" ]] && opener=open
     command -v xdg-open >/dev/null 2>&1 && opener="${opener:-xdg-open}"

@@ -1,4 +1,4 @@
-"""agent-eval end to end with scripted models: output, results.json, trace database, exit status."""
+"""askvisa-eval end to end with scripted models: output, results.json, trace database, exit status."""
 
 import json
 

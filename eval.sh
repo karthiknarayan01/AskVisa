@@ -3,7 +3,7 @@
 #
 #   ./eval.sh                                   every suite, local Qwen as model and judge
 #   ./eval.sh evals/suites/permtracker.toml     one suite
-#   ./eval.sh --repeat 1 --no-judge             any other arguments are passed to agent-eval
+#   ./eval.sh --repeat 1 --no-judge             any other arguments are passed to askvisa-eval
 #   ./eval.sh --judge-model qwen3.5:27b         a bigger local judge (downloaded if missing)
 #   ./eval.sh --provider anthropic              a hosted model instead (needs its API key)
 #
@@ -15,7 +15,7 @@
 #
 # Defaults, each overridden by giving the option: --provider ollama, --model the Qwen that fits
 # this computer's memory (9B, or 4B under 12 GB), --repeat 3, and for Ollama --parallel 1. The
-# judge is agent-eval's default: the evaluated model. Results go to evals/results/. The exit
+# judge is askvisa-eval's default: the evaluated model. Results go to evals/results/. The exit
 # status is 0 only when every suite passed.
 #
 # Written for bash 3.2 (macOS's /bin/bash): no mapfile, and no expanding an array that may be empty.
@@ -65,7 +65,7 @@ main() {
     [[ -z "$model" ]] || model_args+=(--model "$model")
     local failed=0 suite
     for suite in "${suites[@]}"; do
-        "$VENV/bin/agent-eval" "$suite" "${model_args[@]}" --out "$ROOT/evals/results" "${args[@]}" || failed=1
+        "$VENV/bin/askvisa-eval" "$suite" "${model_args[@]}" --out "$ROOT/evals/results" "${args[@]}" || failed=1
         echo
     done
     return $failed

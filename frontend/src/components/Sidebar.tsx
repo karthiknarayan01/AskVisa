@@ -33,7 +33,7 @@ export function Sidebar({ sessions, current, open, onClose, onOpen }: Props) {
       <div className="sidebar__top">
         <a className="wordmark" href="/" onClick={(e) => { e.preventDefault(); onOpen(null); }}>
           <span className="wordmark__seal" aria-hidden="true" />
-          Immigration assistant
+          AskVisa
         </a>
         <button type="button" className="icon-button sidebar__close" onClick={onClose} aria-label="Close the list">
           <CloseIcon />

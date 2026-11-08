@@ -1,4 +1,4 @@
-"""agent-server: its options, and what it does before serving."""
+"""askvisa-server: its options, and what it does before serving."""
 
 from runtime import server
 
@@ -28,4 +28,4 @@ def test_it_migrates_the_database_and_serves(tmp_path, monkeypatch, capsys):
                         "--allow-origin", "http://localhost:5173"]) == 0
     assert db.exists()
     assert served["port"] == 9001 and served["host"] == "127.0.0.1"
-    assert "Open http://127.0.0.1:9001 to use the assistant (x, deepseek)." in capsys.readouterr().out
+    assert "Open http://127.0.0.1:9001 to use AskVisa (x, deepseek)." in capsys.readouterr().out

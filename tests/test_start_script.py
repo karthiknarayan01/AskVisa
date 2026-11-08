@@ -1,6 +1,6 @@
 """start.sh end to end, with a fake Ollama, a fake curl and an already-installed fake venv.
 
-The fake agent-server prints the arguments and API key it was started with, so each test can
+The fake askvisa-server prints the arguments and API key it was started with, so each test can
 check what the script launched.
 """
 
@@ -44,21 +44,21 @@ def env(tmp_path):
     (web / "src").mkdir(parents=True)
     (web / "package-lock.json").write_text("{}")
     (web / "src" / "main.tsx").write_text("one")
-    _executable(venv / "bin" / "agent-server", FAKE_CLI)
+    _executable(venv / "bin" / "askvisa-server", FAKE_CLI)
     checksum = subprocess.run(
         ["cksum"], stdin=open(ROOT / "pyproject.toml"), capture_output=True, text=True, check=True
     ).stdout
-    (venv / ".agent-runtime-installed").write_text(checksum)
+    (venv / ".askvisa-installed").write_text(checksum)
     return {
         "PATH": f"{bin_dir}:/usr/bin:/bin",
         "HOME": str(tmp_path / "home"),
         "XDG_CONFIG_HOME": str(tmp_path / "config"),
         "XDG_STATE_HOME": str(tmp_path / "state"),
-        "AGENT_RUNTIME_VENV": str(venv),
+        "ASKVISA_VENV": str(venv),
         "FAKE_DIR": str(fake),
-        "AGENT_RUNTIME_WEB_DIR": str(web),
-        "AGENT_RUNTIME_NO_BROWSER": "1",
-        "AGENT_RUNTIME_ENV_FILE": str(tmp_path / ".env"),
+        "ASKVISA_WEB_DIR": str(web),
+        "ASKVISA_NO_BROWSER": "1",
+        "ASKVISA_ENV_FILE": str(tmp_path / ".env"),
     }
 
 
@@ -69,7 +69,7 @@ def run(env, stdin="", *args):
 
 
 def config(env) -> Path:
-    return Path(env["XDG_CONFIG_HOME"]) / "agent-runtime" / "config"
+    return Path(env["XDG_CONFIG_HOME"]) / "askvisa" / "config"
 
 
 def ollama_calls(env) -> list[str]:
@@ -130,8 +130,8 @@ def test_a_key_already_in_the_environment_is_used_and_not_saved(env):
 
 
 def test_service_keys_in_the_env_file_reach_the_chat_without_a_prompt(env):
-    Path(env["AGENT_RUNTIME_ENV_FILE"]).write_text('PERMTRACKER_API_KEY="pt_live_abc"\nOTHER=ignored\n')
-    _executable(Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-server",
+    Path(env["ASKVISA_ENV_FILE"]).write_text('PERMTRACKER_API_KEY="pt_live_abc"\nOTHER=ignored\n')
+    _executable(Path(env["ASKVISA_VENV"]) / "bin" / "askvisa-server",
                 '#!/bin/sh\necho "PERM ${PERMTRACKER_API_KEY:-none} OTHER ${OTHER:-none}"\n')
     result = run(env, "1\n")
 
@@ -141,8 +141,8 @@ def test_service_keys_in_the_env_file_reach_the_chat_without_a_prompt(env):
 
 
 def test_a_key_already_in_the_environment_beats_the_env_file(env):
-    Path(env["AGENT_RUNTIME_ENV_FILE"]).write_text("PERMTRACKER_API_KEY=from_file\n")
-    _executable(Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-server",
+    Path(env["ASKVISA_ENV_FILE"]).write_text("PERMTRACKER_API_KEY=from_file\n")
+    _executable(Path(env["ASKVISA_VENV"]) / "bin" / "askvisa-server",
                 '#!/bin/sh\necho "PERM ${PERMTRACKER_API_KEY:-none}"\n')
     result = run({**env, "PERMTRACKER_API_KEY": "from_env"}, "1\n")
     assert "PERM from_env" in result.stdout
@@ -176,11 +176,11 @@ def npm_calls(env):
 def test_the_web_app_is_built_once_and_again_when_its_sources_change(env):
     run(env, "2\nsk-test\n")
     assert npm_calls(env) == ["ci --no-audit --no-fund", "run build"]
-    assert (Path(env["AGENT_RUNTIME_WEB_DIR"]) / "dist" / "index.html").exists()
+    assert (Path(env["ASKVISA_WEB_DIR"]) / "dist" / "index.html").exists()
 
     run(env)
     assert len(npm_calls(env)) == 2
 
-    (Path(env["AGENT_RUNTIME_WEB_DIR"]) / "src" / "main.tsx").write_text("two")
+    (Path(env["ASKVISA_WEB_DIR"]) / "src" / "main.tsx").write_text("two")
     run(env)
     assert len(npm_calls(env)) == 4
