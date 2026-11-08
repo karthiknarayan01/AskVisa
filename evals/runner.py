@@ -5,7 +5,7 @@
 A case runs exactly like a chat turn: the production system prompt (dated suite.today), the
 production tool definitions answering from fixtures, and the runtime's own loop, recorded in an
 event log at db_path. That log is the trace: after a run, any case can be inspected with
-`agent-server --db <db_path>`, then GET /api/sessions/<session id>.
+`askvisa-server --db <db_path>`, then GET /api/sessions/<session id>.
 
 Models are not deterministic, so each case can be run `repeat` times; a case's score is the
 share of attempts that passed. An attempt passes when every check and every judge item passes.

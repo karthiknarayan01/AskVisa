@@ -12,9 +12,9 @@
 #   ensure_model_downloaded M     pull model M unless Ollama already has it
 #   say / fail                    a status line / an error line and exit 1
 
-VENV="${AGENT_RUNTIME_VENV:-$ROOT/.venv}"
-WEB_DIR="${AGENT_RUNTIME_WEB_DIR:-$ROOT/frontend}"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/agent-runtime"
+VENV="${ASKVISA_VENV:-$ROOT/.venv}"
+WEB_DIR="${ASKVISA_WEB_DIR:-$ROOT/frontend}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/askvisa"
 OLLAMA_URL="${OLLAMA_HOST:-127.0.0.1:11434}"
 [[ "$OLLAMA_URL" == http* ]] || OLLAMA_URL="http://$OLLAMA_URL"
 
@@ -22,9 +22,9 @@ OLLAMA_URL="${OLLAMA_HOST:-127.0.0.1:11434}"
 
 install_package() {
     # Reinstall only when pyproject.toml has changed since the last install.
-    local stamp="$VENV/.agent-runtime-installed" want
+    local stamp="$VENV/.askvisa-installed" want
     want="$(cksum < "$ROOT/pyproject.toml")"
-    if [[ -x "$VENV/bin/agent-server" && -f "$stamp" && "$(cat "$stamp")" == "$want" ]]; then
+    if [[ -x "$VENV/bin/askvisa-server" && -f "$stamp" && "$(cat "$stamp")" == "$want" ]]; then
         return
     fi
     if [[ ! -x "$VENV/bin/python" ]]; then
@@ -100,7 +100,7 @@ install_node() {
 load_env_file() {
     # Export the service keys from .env, parsed as KEY=value lines, never executed. A key
     # already set in the environment wins.
-    local file="${AGENT_RUNTIME_ENV_FILE:-$ROOT/.env}" key value
+    local file="${ASKVISA_ENV_FILE:-$ROOT/.env}" key value
     [[ -f "$file" ]] || return 0
     while IFS='=' read -r key value || [[ -n "$key" ]]; do
         key="${key#export }"

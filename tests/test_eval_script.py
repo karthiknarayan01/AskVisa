@@ -1,6 +1,6 @@
 """eval.sh end to end, with a fake Ollama, a fake curl and an already-installed fake venv.
 
-The fake agent-eval prints the arguments it was started with, one run per line, so each test
+The fake askvisa-eval prints the arguments it was started with, one run per line, so each test
 can check which suites ran with which options.
 """
 
@@ -32,17 +32,17 @@ def env(tmp_path):
     (venv / "bin").mkdir(parents=True)
     bin_dir.mkdir(parents=True)
     for path, text in [(bin_dir / "ollama", FAKE_OLLAMA), (bin_dir / "curl", FAKE_CURL),
-                       (venv / "bin" / "agent-eval", FAKE_EVAL), (venv / "bin" / "agent-server", "#!/bin/sh\n")]:
+                       (venv / "bin" / "askvisa-eval", FAKE_EVAL), (venv / "bin" / "askvisa-server", "#!/bin/sh\n")]:
         path.write_text(text)
         path.chmod(0o755)
     checksum = subprocess.run(["cksum"], stdin=open(ROOT / "pyproject.toml"), capture_output=True, text=True).stdout
-    (venv / ".agent-runtime-installed").write_text(checksum)
+    (venv / ".askvisa-installed").write_text(checksum)
     return {
         "PATH": f"{bin_dir}:/usr/bin:/bin",
         "HOME": str(tmp_path / "home"),
         "XDG_STATE_HOME": str(tmp_path / "state"),
-        "AGENT_RUNTIME_VENV": str(venv),
-        "AGENT_RUNTIME_ENV_FILE": str(tmp_path / ".env"),
+        "ASKVISA_VENV": str(venv),
+        "ASKVISA_ENV_FILE": str(tmp_path / ".env"),
         "FAKE_DIR": str(fake),
     }
 
@@ -125,7 +125,7 @@ def test_a_failing_suite_makes_the_script_fail(env):
 
 
 def test_service_keys_from_the_env_file_reach_the_evals(env):
-    Path(env["AGENT_RUNTIME_ENV_FILE"]).write_text("PERMTRACKER_API_KEY=pt_live_abc\n")
-    eval_bin = Path(env["AGENT_RUNTIME_VENV"]) / "bin" / "agent-eval"
+    Path(env["ASKVISA_ENV_FILE"]).write_text("PERMTRACKER_API_KEY=pt_live_abc\n")
+    eval_bin = Path(env["ASKVISA_VENV"]) / "bin" / "askvisa-eval"
     eval_bin.write_text('#!/bin/sh\necho "KEY ${PERMTRACKER_API_KEY:-none}"\n')
     assert "KEY pt_live_abc" in run(env, "--provider", "anthropic").stdout

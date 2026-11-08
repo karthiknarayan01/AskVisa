@@ -44,7 +44,7 @@ def create_app(
     agent: Agent, log: EventLog, allow_origins: list[str] | None = None, static_dir: Path | None = None
 ) -> FastAPI:
     """The app, serving one agent's sessions from one event log, and the web app if built."""
-    app = FastAPI(title="Immigration assistant API", version="1")
+    app = FastAPI(title="AskVisa API", version="1")
     if allow_origins:
         app.add_middleware(CORSMiddleware, allow_origins=allow_origins, allow_methods=["*"], allow_headers=["*"])
     turns = Turns(log, agent)

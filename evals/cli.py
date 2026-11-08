@@ -1,17 +1,17 @@
-"""agent-eval: run an eval suite against a model and report how it did.
+"""askvisa-eval: run an eval suite against a model and report how it did.
 
-    agent-eval evals/suites/permtracker.toml --provider ollama     local Qwen, judged by local Qwen
-    agent-eval evals/suites/permtracker.toml --provider ollama --judge-model qwen3.5:27b
+    askvisa-eval evals/suites/permtracker.toml --provider ollama     local Qwen, judged by local Qwen
+    askvisa-eval evals/suites/permtracker.toml --provider ollama --judge-model qwen3.5:27b
                                                                    a bigger local model as the judge
-    agent-eval evals/suites/permtracker.toml                       Anthropic, judged by Anthropic
-    agent-eval evals/suites/permtracker.toml --provider ollama --judge-provider anthropic
-    agent-eval evals/suites/permtracker.toml --split held_out      only the held-out cases
-    agent-eval evals/suites/permtracker.toml --case visa-bulletin-not-current --repeat 5
-    agent-eval evals/suites/permtracker.toml --no-judge            only the deterministic checks
+    askvisa-eval evals/suites/permtracker.toml                       Anthropic, judged by Anthropic
+    askvisa-eval evals/suites/permtracker.toml --provider ollama --judge-provider anthropic
+    askvisa-eval evals/suites/permtracker.toml --split held_out      only the held-out cases
+    askvisa-eval evals/suites/permtracker.toml --case visa-bulletin-not-current --repeat 5
+    askvisa-eval evals/suites/permtracker.toml --no-judge            only the deterministic checks
 
 Each run writes a directory under evals/results/ (git-ignored) holding results.json and the
 sessions database, so any attempt's full trace can be opened with
-`agent-server --db <dir>/sessions.db`, then GET /api/sessions/<session id>.
+`askvisa-server --db <dir>/sessions.db`, then GET /api/sessions/<session id>.
 
 The judge defaults to the provider and model being evaluated, so a local run needs nothing but
 Ollama: the judge items are concrete checklist lines against the tool results, which a small
@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="agent-eval", description="Run an eval suite against a model.")
+    parser = argparse.ArgumentParser(prog="askvisa-eval", description="Run an eval suite against a model.")
     parser.add_argument("suite", type=Path, help="the suite file, e.g. evals/suites/permtracker.toml")
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="anthropic", help="the model being evaluated")
     parser.add_argument("--model", help="model name (default: the provider's default)")
