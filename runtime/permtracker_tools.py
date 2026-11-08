@@ -41,6 +41,7 @@ the group is for. All tools only read, so they need no approval and are safe to 
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from collections.abc import Callable
@@ -49,7 +50,7 @@ from urllib.parse import quote
 
 import httpx
 
-from runtime.tools import Tool
+from runtime.tools import Tool, awaited
 
 SITE_URL = "https://permtracker.app"
 BASE_URL = f"{SITE_URL}/v1"
@@ -378,7 +379,7 @@ def permtracker_tools(
             FIND_SOC_CODE,
             {"query": _string("A job title, e.g. 'data scientist', or a SOC code, e.g. '15-2051'")},
             ["query"],
-            lambda query: render(client.get("/lookup/soc", {"q": query})),
+            lambda query: lookup(client, "/lookup/soc", {"q": query}),
         ),
     ]
     tools.append(
@@ -397,10 +398,15 @@ def permtracker_tools(
     return tools
 
 
-def data_page(read_page: Callable[[str], str], topic: str) -> str:
-    """The text of the page for `topic`, under a line naming what it shows."""
+async def data_page(read_page: Callable[[str], str], topic: str) -> str:
+    """The text of the page for `topic`, under a line naming what it shows.
+
+    The page reader is a plain function (the web search library has no async API), so it runs
+    in a worker thread.
+    """
     path, about = PAGES[topic]
-    return f"Page: {about}\n\n{read_page(SITE_URL + path)}"
+    text = await asyncio.to_thread(read_page, SITE_URL + path)
+    return f"Page: {about}\n\n{text}"
 
 
 def keyed_tools(client: PermTrackerClient) -> list[Tool]:
@@ -419,8 +425,8 @@ def keyed_tools(client: PermTrackerClient) -> list[Tool]:
                 },
             },
             ["case_number"],
-            lambda case_number, live=False: render(
-                client.get(f"/cases/{_segment(case_number)}", {"live": 1} if live else {})
+            lambda case_number, live=False: lookup(
+                client, f"/cases/{_segment(case_number)}", {"live": 1} if live else {}
             ),
         ),
         _tool(
@@ -428,28 +434,28 @@ def keyed_tools(client: PermTrackerClient) -> list[Tool]:
             PERM_DECISION_ESTIMATE,
             {"filed_date": _string("The PERM filing date, YYYY-MM-DD")},
             ["filed_date"],
-            lambda filed_date: render(client.get("/estimate", {"filed": filed_date})),
+            lambda filed_date: lookup(client, "/estimate", {"filed": filed_date}),
         ),
-        _tool("perm_queue", PERM_QUEUE, {}, [], lambda: render(client.get("/queue", {}))),
+        _tool("perm_queue", PERM_QUEUE, {}, [], lambda: lookup(client, "/queue", {})),
         _tool(
             "visa_bulletin",
             VISA_BULLETIN,
             {"month": _string("YYYY-MM; the newest bulletin if omitted")},
             [],
-            lambda month=None: render(client.get("/visa-bulletin", {"month": month} if month else {})),
+            lambda month=None: lookup(client, "/visa-bulletin", {"month": month} if month else {}),
         ),
         _tool("search_employers", SEARCH_EMPLOYERS, {"query": query}, ["query"],
-              lambda query: render(client.get("/employers", {"q": query}))),
+              lambda query: lookup(client, "/employers", {"q": query})),
         _tool("employer_profile", EMPLOYER_PROFILE, {"slug": slug}, ["slug"],
-              lambda slug: render(client.get(f"/employers/{_segment(slug)}", {}))),
+              lambda slug: lookup(client, f"/employers/{_segment(slug)}", {})),
         _tool("search_law_firms", SEARCH_LAW_FIRMS, {"query": query}, ["query"],
-              lambda query: render(client.get("/law-firms", {"q": query}))),
+              lambda query: lookup(client, "/law-firms", {"q": query})),
         _tool("law_firm_profile", LAW_FIRM_PROFILE, {"slug": slug}, ["slug"],
-              lambda slug: render(client.get(f"/law-firms/{_segment(slug)}", {}))),
+              lambda slug: lookup(client, f"/law-firms/{_segment(slug)}", {})),
         _tool("search_occupations", SEARCH_OCCUPATIONS, {"query": query}, ["query"],
-              lambda query: render(client.get("/occupations", {"q": query}))),
+              lambda query: lookup(client, "/occupations", {"q": query})),
         _tool("occupation_profile", OCCUPATION_PROFILE, {"slug": slug}, ["slug"],
-              lambda slug: render(client.get(f"/occupations/{_segment(slug)}", {}))),
+              lambda slug: lookup(client, f"/occupations/{_segment(slug)}", {})),
         _tool(
             "export_search",
             EXPORT_SEARCH,
@@ -464,17 +470,22 @@ def keyed_tools(client: PermTrackerClient) -> list[Tool]:
                 "outcome": _string("cases only: decision, e.g. certified or denied"),
             },
             ["kind"],
-            lambda kind, **filters: render(client.get(f"/exports/{kind}", _export_params(filters))),
+            lambda kind, **filters: lookup(client, f"/exports/{kind}", _export_params(filters)),
         ),
     ]
 
 
-def match_employer(client: PermTrackerClient, name: str) -> str:
+async def match_employer(client: PermTrackerClient, name: str) -> str:
     """The lookup, with a line saying how far to trust the match and what to do next."""
-    body = client.get("/lookup/employer", {"name": name})
+    body = await client.get("/lookup/employer", {"name": name})
     data = body.get("data") if isinstance(body, dict) else None
     match = data.get("match") if isinstance(data, dict) else None
     return render(body, MATCH_NOTES.get(match) if isinstance(match, str) else None)
+
+
+async def lookup(client: PermTrackerClient, path: str, params: dict[str, Any]) -> str:
+    """GET an endpoint and render its answer."""
+    return render(await client.get(path, params))
 
 
 class DataLookupError(Exception):
@@ -482,18 +493,18 @@ class DataLookupError(Exception):
 
 
 class PermTrackerClient:
-    def __init__(self, api_key: str | None = None, http: httpx.Client | None = None):
+    def __init__(self, api_key: str | None = None, http: httpx.AsyncClient | None = None):
         """`api_key` defaults to PERMTRACKER_API_KEY; `http` is for tests."""
         self.api_key = api_key if api_key is not None else os.environ.get(API_KEY_ENV, "").strip()
-        self.http = http or httpx.Client(timeout=TIMEOUT_SECONDS)
+        self.http = http or httpx.AsyncClient(timeout=TIMEOUT_SECONDS)
 
-    def get(self, path: str, params: dict[str, Any]) -> Any:
+    async def get(self, path: str, params: dict[str, Any]) -> Any:
         """GET an endpoint and return its decoded JSON (or text, if it isn't JSON)."""
         headers = {"Accept": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         try:
-            response = self.http.get(BASE_URL + path, params=params, headers=headers)
+            response = await self.http.get(BASE_URL + path, params=params, headers=headers)
         except httpx.TimeoutException:
             raise DataLookupError("the lookup didn't answer in time; try again shortly") from None
         except httpx.HTTPError as e:
@@ -568,7 +579,7 @@ def _tool(name, description, properties, required, fn) -> Tool:
             "required": required,
             "additionalProperties": False,
         },
-        fn=fn,
+        fn=awaited(fn),
         idempotent=True,
     )
 

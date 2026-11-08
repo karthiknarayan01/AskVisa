@@ -52,7 +52,7 @@ class Server:
 
 
 def registry(server):
-    return ToolRegistry(regulation_tools(RegulationClient(http=httpx.Client(transport=httpx.MockTransport(server)))))
+    return ToolRegistry(regulation_tools(RegulationClient(http=httpx.AsyncClient(transport=httpx.MockTransport(server)))))
 
 
 async def call(tools, tool, **arguments):
@@ -135,7 +135,7 @@ async def test_unreachable_is_an_error():
     def fail(request):
         raise httpx.ConnectError("no route", request=request)
 
-    tools = ToolRegistry(regulation_tools(RegulationClient(http=httpx.Client(transport=httpx.MockTransport(fail)))))
+    tools = ToolRegistry(regulation_tools(RegulationClient(http=httpx.AsyncClient(transport=httpx.MockTransport(fail)))))
     result = await call(tools, "search_regulations", query="x")
     assert result.is_error and "couldn't reach the eCFR" in result.output
 

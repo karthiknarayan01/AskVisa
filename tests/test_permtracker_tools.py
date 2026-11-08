@@ -32,7 +32,7 @@ class Server:
 
 
 def registry(server, api_key="", read_page=None):
-    client = PermTrackerClient(api_key=api_key, http=httpx.Client(transport=httpx.MockTransport(server)))
+    client = PermTrackerClient(api_key=api_key, http=httpx.AsyncClient(transport=httpx.MockTransport(server)))
     return ToolRegistry(permtracker_tools(client, read_page or (lambda url: f"text of {url}")))
 
 
@@ -208,7 +208,7 @@ async def test_network_failures_are_errors_not_crashes():
     def fail(request):
         raise httpx.ConnectError("no route", request=request)
 
-    client = PermTrackerClient(api_key="", http=httpx.Client(transport=httpx.MockTransport(fail)))
+    client = PermTrackerClient(api_key="", http=httpx.AsyncClient(transport=httpx.MockTransport(fail)))
     result = await ToolRegistry(permtracker_tools(client)).run(ToolCall("c1", "find_soc_code", {"query": "x"}))
     assert result.is_error and "couldn't reach the lookup service" in result.output
 

@@ -47,7 +47,7 @@ class Server:
 
 
 def registry(server):
-    return ToolRegistry(federal_register_tools(FederalRegisterClient(http=httpx.Client(transport=httpx.MockTransport(server)))))
+    return ToolRegistry(federal_register_tools(FederalRegisterClient(http=httpx.AsyncClient(transport=httpx.MockTransport(server)))))
 
 
 async def call(tools, tool, **arguments):

@@ -26,6 +26,7 @@ Differences from the hosted providers, handled here:
 from __future__ import annotations
 
 import uuid
+from contextlib import aclosing
 from typing import Any
 
 import httpx
@@ -110,8 +111,11 @@ class OllamaModel:
                 keep_alive=self._keep_alive,
                 options=self._options(),
             )
-            async for chunk in stream:
-                assembler.add(chunk)
+            # aclosing: if the turn is stopped mid-reply, the connection is closed right away and
+            # Ollama stops generating, rather than whenever the generator is collected.
+            async with aclosing(stream):
+                async for chunk in stream:
+                    assembler.add(chunk)
         except ollama.ResponseError as e:
             raise ModelError(f"Ollama error: {e.error}") from None
         except (httpx.ConnectError, ConnectionError):
