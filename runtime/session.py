@@ -73,6 +73,10 @@ INTERRUPTED_RESULT = (
     "Interrupted: the process stopped while this tool was running, so it may or may not have "
     "completed. Check its effect before running it again."
 )
+STOPPED_RESULT = (
+    "Stopped: the user stopped the request while this tool was running, so it may or may not "
+    "have completed."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,7 +189,7 @@ class Session:
         """
         if not self.state.turn_open:
             return
-        self._abandon_open_calls(reason="cancelled by the user")
+        self._abandon_open_calls(reason="cancelled by the user", started_result=STOPPED_RESULT)
         self._record("turn_stopped", {"reason": "cancelled"})
 
     async def _continue_turn(self) -> TurnResult:
@@ -352,15 +356,15 @@ class Session:
             payload["interrupted"] = True
         self._record("tool_finished", payload)
 
-    def _abandon_open_calls(self, reason: str) -> None:
+    def _abandon_open_calls(self, reason: str, started_result: str = INTERRUPTED_RESULT) -> None:
         """Give every call still open a result without running anything.
 
-        A call that had started gets the interrupted result, since it may have had its effect;
+        A call that had started gets `started_result`, which says it may have had its effect;
         the others are skipped with `reason`.
         """
         for tool in self.state.unfinished_calls():
             if tool.status is ToolCallStatus.STARTED:
-                self._finish(tool.call, INTERRUPTED_RESULT, is_error=True, interrupted=True)
+                self._finish(tool.call, started_result, is_error=True, interrupted=True)
             else:
                 self._record("tool_skipped", {"call_id": tool.call.id, "reason": reason})
 

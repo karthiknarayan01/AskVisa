@@ -22,7 +22,7 @@ from typing import Any
 
 import httpx
 
-from runtime.tools import Tool
+from runtime.tools import Tool, awaited
 
 BASE_URL = "https://www.federalregister.gov/api/v1"
 TIMEOUT_SECONDS = 20
@@ -120,7 +120,7 @@ def federal_register_tools(client: FederalRegisterClient | None = None) -> list[
     ]
 
 
-def search_federal_register(
+async def search_federal_register(
     client: FederalRegisterClient,
     query: str,
     document_type: str | None = None,
@@ -137,9 +137,9 @@ def search_federal_register(
     slugs = [AGENCIES[agency]] if agency else list(AGENCIES.values())
     note = ""
     try:
-        body = client.get_json("/documents.json", params + [("conditions[agencies][]", s) for s in slugs])
+        body = await client.get_json("/documents.json", params + [("conditions[agencies][]", s) for s in slugs])
     except AgencyFilterRejected:
-        body = client.get_json("/documents.json", params)
+        body = await client.get_json("/documents.json", params)
         note = " (the agency filter was rejected, so these are from all agencies)"
     results = body.get("results") or []
     if not results:
@@ -150,18 +150,18 @@ def search_federal_register(
     return "\n".join(lines)
 
 
-def read_document(client: FederalRegisterClient, document_number: str) -> str:
+async def read_document(client: FederalRegisterClient, document_number: str) -> str:
     """The document's details, then its text from the start."""
     number = document_number.strip()
     if not DOCUMENT_NUMBER.match(number):
         raise ValueError(f"document_number must look like '2026-21456', got {document_number!r}")
-    doc = client.get_json(f"/documents/{number}.json", [("fields[]", f) for f in FIELDS + ["raw_text_url", "dates"]])
+    doc = await client.get_json(f"/documents/{number}.json", [("fields[]", f) for f in FIELDS + ["raw_text_url", "dates"]])
     lines = describe(doc, abstract=False)
     if doc.get("dates"):
         lines.append(f"Dates: {_plain(doc['dates'])}")
     text = ""
     if doc.get("raw_text_url"):
-        text = " ".join(client.get_text(doc["raw_text_url"]).split())
+        text = " ".join((await client.get_text(doc["raw_text_url"])).split())
     if not text:
         text = _plain(doc.get("abstract") or "") or "(no text available)"
     clipped = ""
@@ -205,27 +205,27 @@ class AgencyFilterRejected(FederalRegisterError):
 
 
 class FederalRegisterClient:
-    def __init__(self, http: httpx.Client | None = None):
+    def __init__(self, http: httpx.AsyncClient | None = None):
         """`http` is for tests."""
-        self.http = http or httpx.Client(timeout=TIMEOUT_SECONDS, follow_redirects=True)
+        self.http = http or httpx.AsyncClient(timeout=TIMEOUT_SECONDS, follow_redirects=True)
 
-    def get_json(self, path: str, params: list[tuple[str, Any]]) -> Any:
-        response = self._get(BASE_URL + path, params)
+    async def get_json(self, path: str, params: list[tuple[str, Any]]) -> Any:
+        response = await self._get(BASE_URL + path, params)
         if response.status_code == 400 and "agencies" in response.text:
             raise AgencyFilterRejected(response.text[:200])
         self._raise_for(response)
         return response.json()
 
-    def get_text(self, url: str) -> str:
+    async def get_text(self, url: str) -> str:
         if not url.startswith("https://www.federalregister.gov/"):
             raise FederalRegisterError(f"refusing to fetch text from outside federalregister.gov: {url}")
-        response = self._get(url, [])
+        response = await self._get(url, [])
         self._raise_for(response)
         return response.text
 
-    def _get(self, url: str, params: list[tuple[str, Any]]) -> httpx.Response:
+    async def _get(self, url: str, params: list[tuple[str, Any]]) -> httpx.Response:
         try:
-            return self.http.get(url, params=params)
+            return await self.http.get(url, params=params)
         except httpx.TimeoutException:
             raise FederalRegisterError("the Federal Register didn't answer in time; try again shortly") from None
         except httpx.HTTPError as e:
@@ -249,6 +249,6 @@ def _tool(name, description, properties, required, fn) -> Tool:
         name=name,
         description=description,
         input_schema={"type": "object", "properties": properties, "required": required, "additionalProperties": False},
-        fn=fn,
+        fn=awaited(fn),
         idempotent=True,
     )

@@ -15,12 +15,18 @@ and can recover from.
 A tool function may be `async def`, which is awaited on the event loop, or a plain function,
 which runs in a worker thread (asyncio.to_thread) so it doesn't block the loop while it waits
 on disk or network. Either way several calls can run at the same time.
+
+Stopping a turn cancels its running calls. An `async def` tool stops where it is: an HTTP
+request it is waiting on is abandoned and its connection closed. A thread can't be stopped, so
+a plain function runs to the end in the background and its result is thrown away; tools that
+call services are therefore `async def`.
 """
 
 from __future__ import annotations
 
 import asyncio
 import inspect
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -98,3 +104,13 @@ class ToolRegistry:
     def is_idempotent(self, name: str) -> bool:
         tool = self._tools.get(name)
         return tool is not None and tool.idempotent
+
+
+def awaited(fn: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+    """An `async def` around a plain function that returns an awaitable (a lambda calling an
+    async function), so the registry awaits it on the event loop instead of in a thread."""
+
+    async def run(**arguments: Any) -> Any:
+        return await fn(**arguments)
+
+    return run

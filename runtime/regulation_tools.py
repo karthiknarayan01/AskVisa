@@ -27,7 +27,7 @@ from typing import Any
 
 import httpx
 
-from runtime.tools import Tool
+from runtime.tools import Tool, awaited
 
 BASE_URL = "https://www.ecfr.gov/api"
 TITLES = {8: "Aliens and Nationality", 20: "Employees' Benefits", 22: "Foreign Relations"}
@@ -110,10 +110,10 @@ def regulation_tools(client: RegulationClient | None = None) -> list[Tool]:
     ]
 
 
-def search_regulations(client: RegulationClient, query: str, title: int = 8) -> str:
+async def search_regulations(client: RegulationClient, query: str, title: int = 8) -> str:
     """Matching sections, each with its heading and an excerpt."""
-    current = client.current_date(title)
-    body = client.get_json("/search/v1/results", {
+    current = await client.current_date(title)
+    body = await client.get_json("/search/v1/results", {
         "query": query, "hierarchy[title]": title, "date": current, "per_page": MAX_RESULTS,
     })
     results = body.get("results") or []
@@ -130,13 +130,13 @@ def search_regulations(client: RegulationClient, query: str, title: int = 8) -> 
     return "\n".join(line for line in lines if line is not None).rstrip()
 
 
-def read_regulation(client: RegulationClient, section: str, paragraph: str | None = None, title: int = 8) -> str:
+async def read_regulation(client: RegulationClient, section: str, paragraph: str | None = None, title: int = 8) -> str:
     """The section's text, from `paragraph` when given, clipped to MAX_TEXT_CHARS."""
     section = section.strip().removeprefix("§").strip()
     if not SECTION.match(section):
         raise ValueError(f"section must look like '214.2', got {section!r}")
-    current = client.current_date(title)
-    xml = client.get_text(f"/versioner/v1/full/{current}/title-{title}.xml", {
+    current = await client.current_date(title)
+    xml = await client.get_text(f"/versioner/v1/full/{current}/title-{title}.xml", {
         "part": section.split(".")[0], "section": section,
     })
     blocks = xml_blocks(xml)
@@ -199,17 +199,17 @@ class RegulationError(Exception):
 
 
 class RegulationClient:
-    def __init__(self, http: httpx.Client | None = None):
+    def __init__(self, http: httpx.AsyncClient | None = None):
         """`http` is for tests. eCFR requires compressed responses, which httpx asks for."""
-        self.http = http or httpx.Client(timeout=TIMEOUT_SECONDS)
+        self.http = http or httpx.AsyncClient(timeout=TIMEOUT_SECONDS)
         self._current: dict[int, str] = {}
 
-    def current_date(self, title: int) -> str:
+    async def current_date(self, title: int) -> str:
         """The date the title is up to date as of; asked once per title."""
         if title not in TITLES:
             raise ValueError(f"title must be one of {sorted(TITLES)}")
         if title not in self._current:
-            body = self.get_json("/versioner/v1/titles.json", {})
+            body = await self.get_json("/versioner/v1/titles.json", {})
             for entry in body.get("titles", []):
                 if entry.get("number") in TITLES and entry.get("up_to_date_as_of"):
                     self._current[entry["number"]] = entry["up_to_date_as_of"]
@@ -217,15 +217,15 @@ class RegulationClient:
                 raise RegulationError(f"eCFR didn't say how current title {title} is")
         return self._current[title]
 
-    def get_json(self, path: str, params: dict[str, Any]) -> Any:
-        return self._get(path, params).json()
+    async def get_json(self, path: str, params: dict[str, Any]) -> Any:
+        return (await self._get(path, params)).json()
 
-    def get_text(self, path: str, params: dict[str, Any]) -> str:
-        return self._get(path, params).content.decode("utf-8")
+    async def get_text(self, path: str, params: dict[str, Any]) -> str:
+        return (await self._get(path, params)).content.decode("utf-8")
 
-    def _get(self, path: str, params: dict[str, Any]) -> httpx.Response:
+    async def _get(self, path: str, params: dict[str, Any]) -> httpx.Response:
         try:
-            response = self.http.get(BASE_URL + path, params=params)
+            response = await self.http.get(BASE_URL + path, params=params)
         except httpx.TimeoutException:
             raise RegulationError("the eCFR didn't answer in time; try again shortly") from None
         except httpx.HTTPError as e:
@@ -247,6 +247,6 @@ def _tool(name, description, properties, required, fn) -> Tool:
         name=name,
         description=description,
         input_schema={"type": "object", "properties": properties, "required": required, "additionalProperties": False},
-        fn=fn,
+        fn=awaited(fn),
         idempotent=True,
     )

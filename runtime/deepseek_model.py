@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import aclosing
 from typing import Any
 
 import openai
@@ -84,8 +85,11 @@ class DeepSeekModel:
             ]
         assembler = StreamAssembler(on_delta)
         try:
-            async for chunk in await self._client.chat.completions.create(**request):
-                assembler.add(chunk)
+            # aclosing: if the turn is stopped mid-reply, the HTTP stream is closed right away,
+            # which ends the generation, rather than whenever the generator is collected.
+            async with aclosing(await self._client.chat.completions.create(**request)) as stream:
+                async for chunk in stream:
+                    assembler.add(chunk)
         except openai.APIError as e:
             raise ModelError(f"DeepSeek API error: {e}") from e
         return assembler.reply()

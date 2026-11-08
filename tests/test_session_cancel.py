@@ -4,7 +4,7 @@ import pytest
 
 from runtime.approval import AutoApprove
 from runtime.events import EventLog
-from runtime.session import INTERRUPTED_RESULT, Session
+from runtime.session import STOPPED_RESULT, Session
 from runtime.state import project
 from runtime.tools import Tool, ToolRegistry
 from tests.fake_model import FakeModel, call, say
@@ -20,14 +20,14 @@ def log(db):
         yield log
 
 
-async def test_cancel_during_a_tool_gives_it_the_interrupted_result(log):
+async def test_cancel_during_a_tool_gives_it_the_stopped_result(log):
     session = Session.create(log, FakeModel([call("slow")]), _tools(stop_in="slow"), approver=AutoApprove())
     with pytest.raises(Stop):
         await session.run_turn("go")
 
     session.cancel()
     assert not session.needs_resume
-    assert session.state.messages[-1].text == INTERRUPTED_RESULT
+    assert session.state.messages[-1].text == STOPPED_RESULT
     assert _types(log, session)[-1] == "turn_stopped"
 
 
