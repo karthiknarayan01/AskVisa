@@ -21,7 +21,7 @@ from pathlib import Path
 
 import uvicorn
 
-from runtime.agent import build_agent
+from runtime.agent import Agent, build_agent
 from runtime.api import create_app
 from runtime.events import EventLog
 from runtime.migrate import migrate
@@ -35,17 +35,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         agent = build_agent(args.provider, args.model, web=not args.no_web)
-        asyncio.run(agent.check())
     except (RuntimeError, ValueError, ModelError) as e:
         print(f"✗ {e}", file=sys.stderr)
         return 1
-    migrate(args.db)
-    log = EventLog(args.db)
-    app = create_app(agent, log, allow_origins=args.allow_origin, static_dir=args.static)
-    print(f"Open http://{args.host}:{args.port} to use AskVisa ({agent.model_name}, {agent.provider}).")
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
-    log.close()
-    return 0
+    return asyncio.run(serve(agent, args))
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -59,6 +52,29 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--allow-origin", action="append", default=[], help="a browser origin allowed to call the API")
     parser.add_argument("--static", type=Path, default=WEB_APP, help="the built web app (default frontend/dist)")
     return parser.parse_args(argv)
+
+
+async def serve(agent: Agent, args: argparse.Namespace) -> int:
+    """Check the model, then serve until stopped, all on one event loop.
+
+    The model's HTTP client keeps connections open in the loop that first used them, so the
+    check and the turns must share a loop: a check run under its own asyncio.run leaves pooled
+    connections tied to a closed loop, and the first turn fails with "Event loop is closed".
+    """
+    try:
+        await agent.check()
+    except ModelError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        return 1
+    migrate(args.db)
+    log = EventLog(args.db)
+    try:
+        app = create_app(agent, log, allow_origins=args.allow_origin, static_dir=args.static)
+        print(f"Open http://{args.host}:{args.port} to use AskVisa ({agent.model_name}, {agent.provider}).")
+        await uvicorn.Server(uvicorn.Config(app, host=args.host, port=args.port, log_level="warning")).serve()
+    finally:
+        log.close()
+    return 0
 
 
 if __name__ == "__main__":
