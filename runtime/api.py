@@ -14,13 +14,18 @@ or the last one was interrupted (resume it), 422 for an empty message.
 
 A browser reads the stream with fetch() and a reader over response.body, the way chat apps do;
 EventSource can't send a POST body. Interactive docs are at /docs.
+
+Given `static_dir` (the built web app, frontend/dist), the app is served too: its files as they
+are, and index.html for any other path outside /api, so /c/<session id> opens in the app.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from runtime.agent import Agent
@@ -35,8 +40,10 @@ class NewMessage(BaseModel):
     text: str = Field(min_length=1, max_length=20_000)
 
 
-def create_app(agent: Agent, log: EventLog, allow_origins: list[str] | None = None) -> FastAPI:
-    """The app, serving one agent's sessions from one event log."""
+def create_app(
+    agent: Agent, log: EventLog, allow_origins: list[str] | None = None, static_dir: Path | None = None
+) -> FastAPI:
+    """The app, serving one agent's sessions from one event log, and the web app if built."""
     app = FastAPI(title="Immigration assistant API", version="1")
     if allow_origins:
         app.add_middleware(CORSMiddleware, allow_origins=allow_origins, allow_methods=["*"], allow_headers=["*"])
@@ -102,6 +109,18 @@ def create_app(agent: Agent, log: EventLog, allow_origins: list[str] | None = No
         if not turns.cancel(session_id):
             raise HTTPException(409, "no turn is running")
         return {"cancelling": True}
+
+    if static_dir is not None and (static_dir / "index.html").is_file():
+        root = static_dir.resolve()
+
+        @app.get("/{path:path}", include_in_schema=False)
+        async def web_app(path: str) -> FileResponse:
+            if path.startswith("api/"):
+                raise HTTPException(404, "no such endpoint")
+            file = (root / path).resolve()
+            if path and file.is_file() and file.is_relative_to(root):
+                return FileResponse(file)
+            return FileResponse(root / "index.html")
 
     return app
 

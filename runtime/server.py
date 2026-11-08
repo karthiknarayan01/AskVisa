@@ -1,9 +1,12 @@
-"""agent-server: serve the agent's REST API.
+"""agent-server: serve the assistant, the web app and its REST API.
 
     agent-server                                  Anthropic, on http://127.0.0.1:8000
     agent-server --provider ollama                local Qwen
     agent-server --port 9000 --db sessions.db
     agent-server --allow-origin http://localhost:5173    let a dev frontend on another port call it
+
+The web app is served from frontend/dist when it has been built (npm run build in frontend/, which
+start.sh does); --static points elsewhere.
 
 Before serving it migrates the database and, for a local model, checks that Ollama is running
 and the model is downloaded, exiting with what to do if not. The API's docs are at /docs.
@@ -14,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from pathlib import Path
 
 import uvicorn
 
@@ -23,6 +27,8 @@ from runtime.events import EventLog
 from runtime.migrate import migrate
 from runtime.model import ModelError
 from runtime.providers import PROVIDERS
+
+WEB_APP = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,15 +41,15 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     migrate(args.db)
     log = EventLog(args.db)
-    app = create_app(agent, log, allow_origins=args.allow_origin)
-    print(f"Serving {agent.model_name} ({agent.provider}) on http://{args.host}:{args.port}  (API docs: /docs)")
+    app = create_app(agent, log, allow_origins=args.allow_origin, static_dir=args.static)
+    print(f"Open http://{args.host}:{args.port} to use the assistant ({agent.model_name}, {agent.provider}).")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     log.close()
     return 0
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="agent-server", description="Serve the agent's REST API.")
+    parser = argparse.ArgumentParser(prog="agent-server", description="Serve the assistant: the web app and its REST API.")
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="anthropic")
     parser.add_argument("--model", help="model name (default: the provider's default)")
     parser.add_argument("--host", default="127.0.0.1", help="address to listen on (default 127.0.0.1)")
@@ -51,6 +57,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--db", default="agent.db", help="the sessions database (default agent.db)")
     parser.add_argument("--no-web", action="store_true", help="don't give the agent web search")
     parser.add_argument("--allow-origin", action="append", default=[], help="a browser origin allowed to call the API")
+    parser.add_argument("--static", type=Path, default=WEB_APP, help="the built web app (default frontend/dist)")
     return parser.parse_args(argv)
 
 

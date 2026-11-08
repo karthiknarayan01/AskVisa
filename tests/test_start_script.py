@@ -23,6 +23,10 @@ case "$1" in
 esac
 """
 FAKE_CURL = '#!/bin/sh\n[ -f "$FAKE_DIR/up" ]\n'
+FAKE_NPM = """#!/bin/sh
+echo "$*" >> "$FAKE_DIR/npm.log"
+if [ "$1 $2" = "run build" ]; then mkdir -p dist && echo app > dist/index.html; fi
+"""
 FAKE_CLI = '#!/bin/sh\necho "ARGS $*"\necho "ANTHROPIC ${ANTHROPIC_API_KEY:-none}"\n'
 
 
@@ -35,6 +39,11 @@ def env(tmp_path):
     bin_dir.mkdir(parents=True)
     _executable(bin_dir / "ollama", FAKE_OLLAMA)
     _executable(bin_dir / "curl", FAKE_CURL)
+    _executable(bin_dir / "npm", FAKE_NPM)
+    web = tmp_path / "web"
+    (web / "src").mkdir(parents=True)
+    (web / "package-lock.json").write_text("{}")
+    (web / "src" / "main.tsx").write_text("one")
     _executable(venv / "bin" / "agent-server", FAKE_CLI)
     checksum = subprocess.run(
         ["cksum"], stdin=open(ROOT / "pyproject.toml"), capture_output=True, text=True, check=True
@@ -47,6 +56,8 @@ def env(tmp_path):
         "XDG_STATE_HOME": str(tmp_path / "state"),
         "AGENT_RUNTIME_VENV": str(venv),
         "FAKE_DIR": str(fake),
+        "AGENT_RUNTIME_WEB_DIR": str(web),
+        "AGENT_RUNTIME_NO_BROWSER": "1",
         "AGENT_RUNTIME_ENV_FILE": str(tmp_path / ".env"),
     }
 
@@ -155,3 +166,21 @@ def test_no_answer_and_no_config_fails_with_a_hint(env):
 def _executable(path: Path, text: str) -> None:
     path.write_text(text)
     path.chmod(0o755)
+
+
+def npm_calls(env):
+    log = Path(env["FAKE_DIR"]) / "npm.log"
+    return log.read_text().splitlines() if log.exists() else []
+
+
+def test_the_web_app_is_built_once_and_again_when_its_sources_change(env):
+    run(env, "2\nsk-test\n")
+    assert npm_calls(env) == ["ci --no-audit --no-fund", "run build"]
+    assert (Path(env["AGENT_RUNTIME_WEB_DIR"]) / "dist" / "index.html").exists()
+
+    run(env)
+    assert len(npm_calls(env)) == 2
+
+    (Path(env["AGENT_RUNTIME_WEB_DIR"]) / "src" / "main.tsx").write_text("two")
+    run(env)
+    assert len(npm_calls(env)) == 4

@@ -7,7 +7,8 @@
 #
 # First run:
 #   1. creates .venv next to this script and installs the package (again whenever
-#      pyproject.toml changes)
+#      pyproject.toml changes), and builds the web app (installing Node.js first if needed,
+#      after asking; again whenever the frontend changes)
 #   2. asks which model to use: Qwen on this computer (through Ollama), Anthropic or DeepSeek
 #   3. local: installs Ollama if it's missing (after asking), starts it, downloads the model
 #      hosted: asks for the API key unless it is already in the environment
@@ -39,6 +40,7 @@ main() {
     done
 
     install_package
+    build_web_app
     load_env_file
     if [[ $setup -eq 0 ]] && load_config; then
         say "Using $MODEL ($PROVIDER). Run ./start.sh --setup to change it."
@@ -130,7 +132,29 @@ save_config() {
 launch() {
     [[ -n "$ANTHROPIC_KEY" && -z "${ANTHROPIC_API_KEY:-}" ]] && export ANTHROPIC_API_KEY="$ANTHROPIC_KEY"
     [[ -n "$DEEPSEEK_KEY" && -z "${DEEPSEEK_API_KEY:-}" ]] && export DEEPSEEK_API_KEY="$DEEPSEEK_KEY"
+    open_browser_when_ready "$@"
     exec "$VENV/bin/agent-server" --provider "$PROVIDER" --model "$MODEL" "$@"
+}
+
+open_browser_when_ready() {
+    # Open the app in the browser once the server answers. Skipped without a browser opener,
+    # or when AGENT_RUNTIME_NO_BROWSER is set.
+    [[ -z "${AGENT_RUNTIME_NO_BROWSER:-}" ]] || return 0
+    local opener="" port=8000 previous=""
+    command -v open >/dev/null 2>&1 && [[ "$(uname)" == "Darwin" ]] && opener=open
+    command -v xdg-open >/dev/null 2>&1 && opener="${opener:-xdg-open}"
+    [[ -n "$opener" ]] || return 0
+    for arg in "$@"; do
+        [[ "$previous" == "--port" ]] && port="$arg"
+        previous="$arg"
+    done
+    local url="http://127.0.0.1:$port"
+    (
+        for _ in $(seq 1 60); do
+            curl -fsS --max-time 1 "$url/api/health" >/dev/null 2>&1 && exec "$opener" "$url"
+            sleep 0.5
+        done
+    ) >/dev/null 2>&1 &
 }
 
 main "$@"

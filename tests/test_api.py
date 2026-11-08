@@ -113,3 +113,23 @@ async def test_cors_only_when_origins_are_allowed(log):
     async with client(create_app(make_agent([]), log)) as http:
         response = await http.get("/api/health", headers={"Origin": "http://localhost:5173"})
         assert "access-control-allow-origin" not in response.headers
+
+
+async def test_the_web_app_is_served_with_a_fallback_to_index(log, tmp_path):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>app</html>")
+    (dist / "assets" / "app.js").write_text("console.log(1)")
+    (tmp_path / "secret.txt").write_text("no")
+    async with client(create_app(make_agent([]), log, static_dir=dist)) as http:
+        assert (await http.get("/")).text == "<html>app</html>"
+        assert (await http.get("/c/some-session")).text == "<html>app</html>"
+        assert (await http.get("/assets/app.js")).text == "console.log(1)"
+        assert (await http.get("/../secret.txt")).text != "no"
+        assert (await http.get("/api/nope")).status_code == 404
+        assert (await http.get("/api/health")).json() == {"status": "ok"}
+
+
+async def test_without_a_built_app_only_the_api_is_served(log, tmp_path):
+    async with client(create_app(make_agent([]), log, static_dir=tmp_path / "missing")) as http:
+        assert (await http.get("/")).status_code == 404

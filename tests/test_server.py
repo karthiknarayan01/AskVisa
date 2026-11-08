@@ -28,4 +28,4 @@ def test_it_migrates_the_database_and_serves(tmp_path, monkeypatch, capsys):
                         "--allow-origin", "http://localhost:5173"]) == 0
     assert db.exists()
     assert served["port"] == 9001 and served["host"] == "127.0.0.1"
-    assert "Serving x (deepseek) on http://127.0.0.1:9001" in capsys.readouterr().out
+    assert "Open http://127.0.0.1:9001 to use the assistant (x, deepseek)." in capsys.readouterr().out
