@@ -71,3 +71,12 @@ def test_a_stored_conversation_uses_the_same_shapes():
     assert items[2]["tool_calls"] == [{"id": "c1", "name": "echo", "arguments": {"text": "hi"}}]
     assert items[3]["name"] == "echo" and items[3]["arguments"] == {"text": "hi"} and items[3]["summary"] == "echo: hi"
     json.dumps(items)
+
+
+def test_a_dol_result_with_a_note_is_summarized_by_the_note():
+    from runtime.tool_summary import summarize
+
+    noted = "Department of Labor data as of 2026-11-06\nMatch: exact. The numbers below are this employer's record.\n{}"
+    assert summarize("match_employer", noted) == "Match: exact. The numbers below are this employer's record."
+    plain = "Department of Labor data as of 2026-11-06\n{\"codes\": []}"
+    assert summarize("find_soc_code", plain) == "Department of Labor data as of 2026-11-06"

@@ -2,7 +2,8 @@
 
     web_search      "5 results" / "no results"
     read_web_page   "12,480 characters"
-    anything else   the result's first line (the date line, the calculator's answer, ...)
+    DOL tools       the line after the date line when it is a note ("Match: exact. …"), else the date line
+    anything else   the result's first line (the calculator's answer, the regulation's heading, ...)
 """
 
 from __future__ import annotations
@@ -20,6 +21,8 @@ def summarize(tool: str, output: str) -> str:
         return f"{count} result" + ("" if count == 1 else "s")
     if tool == "read_web_page":
         return f"{len(output):,} characters"
+    if len(lines) > 1 and lines[0].startswith("Department of Labor data") and lines[1][:1] not in "{[":
+        return shorten(lines[1])
     return shorten(lines[0]) if lines else "done"
 
 

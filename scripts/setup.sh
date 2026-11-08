@@ -5,6 +5,7 @@
 #   source "$ROOT/scripts/setup.sh"
 #
 #   install_package               .venv with the package installed (again when pyproject.toml changes)
+#   build_web_app                 frontend/dist built (again when the frontend's files change)
 #   load_env_file                 export service keys (PERMTRACKER_API_KEY) from .env
 #   qwen_for_this_machine         the Qwen model that fits this computer's memory
 #   ensure_ollama_running         install Ollama (after asking) and start it if needed
@@ -12,6 +13,7 @@
 #   say / fail                    a status line / an error line and exit 1
 
 VENV="${AGENT_RUNTIME_VENV:-$ROOT/.venv}"
+WEB_DIR="${AGENT_RUNTIME_WEB_DIR:-$ROOT/frontend}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/agent-runtime"
 OLLAMA_URL="${OLLAMA_HOST:-127.0.0.1:11434}"
 [[ "$OLLAMA_URL" == http* ]] || OLLAMA_URL="http://$OLLAMA_URL"
@@ -53,6 +55,44 @@ find_python() {
         fi
     done
     return 1
+}
+
+# --- the web app ----------------------------------------------------------------------------
+
+build_web_app() {
+    # Rebuild only when the frontend's sources or lock file have changed since the last build.
+    local stamp="$WEB_DIR/dist/.built-from" want
+    want="$(web_sources_checksum)"
+    if [[ -f "$WEB_DIR/dist/index.html" && -f "$stamp" && "$(cat "$stamp")" == "$want" ]]; then
+        return
+    fi
+    command -v npm >/dev/null 2>&1 || install_node
+    say "Building the web app…"
+    mkdir -p "$STATE_DIR"
+    local log="$STATE_DIR/web-build.log"
+    if ! (cd "$WEB_DIR" && npm ci --no-audit --no-fund && npm run build) > "$log" 2>&1; then
+        tail -n 20 "$log" >&2
+        fail "Building the web app failed; the full output is in $log"
+    fi
+    printf '%s\n' "$want" > "$stamp"
+}
+
+web_sources_checksum() {
+    # find fails on a path that doesn't exist; that only means there's nothing there to hash.
+    (cd "$WEB_DIR" && { find package-lock.json index.html vite.config.ts tsconfig.json src public -type f 2>/dev/null || true; } |
+        LC_ALL=C sort | xargs cat | cksum)
+}
+
+install_node() {
+    local answer
+    read -r -p "The web app needs Node.js to build, and it isn't installed. Install it now? [Y/n] " answer ||
+        fail "Node.js isn't installed. Get it from https://nodejs.org (version 20 or newer) and run this again."
+    [[ "${answer:-y}" =~ ^[Yy] ]] || fail "Install Node.js from https://nodejs.org (version 20 or newer) and run this again."
+    if [[ "$(uname)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+        brew install node
+    else
+        fail "Install Node.js 20 or newer from https://nodejs.org, then run this again."
+    fi
 }
 
 # --- service keys ---------------------------------------------------------------------------
