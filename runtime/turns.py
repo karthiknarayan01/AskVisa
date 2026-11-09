@@ -4,6 +4,7 @@
     session = turns.session(session_id)          opened once, then kept in memory
     async for chunk in turns.stream(session_id, "question"):   Server-Sent Events, ending with `end`
     turns.cancel(session_id)                     stop the running turn
+    await turns.delete(session_id)               stop it if running, then delete the session
 
 A turn runs as its own task, not inside the HTTP response. If the browser disconnects, only the
 stream stops: the turn finishes and is saved, and the conversation shows it when reopened, the
@@ -85,6 +86,15 @@ class Turns:
             return False
         task.cancel()
         return True
+
+    async def delete(self, session_id: str) -> None:
+        """Delete the session and its events. A running turn is stopped first and waited for,
+        so it can't write to the session after it is gone. Raises UnknownSession."""
+        while (task := self._running.get(session_id)) is not None:  # a turn started while waiting is stopped too
+            task.cancel()
+            await asyncio.wait([task])
+        self.log.delete_session(session_id)
+        self._sessions.pop(session_id, None)
 
     def _refuse_if_running(self, session_id: str) -> None:
         # A running turn is also an open one, so this is checked before needs_resume.

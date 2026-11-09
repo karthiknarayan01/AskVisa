@@ -110,5 +110,24 @@ export function useChat() {
     if (sessionId && !running) run(sessionId, null);
   }, [sessionId, running, run]);
 
-  return { sessions, sessionId, turns, running, interrupted, error, model, send, stop, resume, navigate };
+  /** Delete a conversation. It leaves the list at once; if it is open, the app goes to a new question. */
+  const remove = useCallback(
+    async (id: string) => {
+      setSessions((all) => all.filter((s) => s.id !== id));
+      if (id === sessionId) {
+        abort.current?.abort();
+        navigate(null);
+      }
+      try {
+        await api.remove(id);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "The conversation couldn't be deleted.");
+      } finally {
+        refreshSessions();
+      }
+    },
+    [sessionId, navigate, refreshSessions],
+  );
+
+  return { sessions, sessionId, turns, running, interrupted, error, model, send, stop, resume, navigate, remove };
 }

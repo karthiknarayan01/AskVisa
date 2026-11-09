@@ -51,6 +51,7 @@ export default function App() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         onOpen={(id) => chat.navigate(id)}
+        onDelete={chat.remove}
       />
       {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} />}
       <main className="main">
