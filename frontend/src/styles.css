@@ -132,6 +132,45 @@ a {
   color: var(--muted);
 }
 
+.topbar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 0.9rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--stamp) 10%, transparent);
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+
+.topbar__status-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--stamp);
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+/* A conversation still answering, in the list: a small stamp-violet dot that breathes. */
+.history__running {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin: 0 0.45rem 0.08rem 0;
+  border-radius: 50%;
+  background: var(--stamp);
+  vertical-align: middle;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
 .scroller {
   overflow-y: auto;
   scroll-behavior: smooth;

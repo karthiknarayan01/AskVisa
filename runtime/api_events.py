@@ -1,6 +1,6 @@
-"""What a turn looks like on the wire: Server-Sent Events, one per step of the turn.
-
-Each event is `event: <type>` and `data: <json>`, in the order things happen:
+"""What a turn looks like on the wire: one event per step of the turn, sent over the live
+channel (runtime/live.py) as {"type": "event", "session_id", "request_id", "event", "data"},
+in the order things happen:
 
     user_message       {"text", "request_id"}                    the turn's question, and the turn's id
     reasoning          {"delta"}                                 a piece of the model's thinking
@@ -20,7 +20,7 @@ text, then its tool events, then the next step. `end` says how the turn finished
     completed   "text" is the final answer
     cancelled   the user stopped it
     stopped     the turn stopped early: "message" says why (step limit, truncated reply, ...)
-    error       a model API error: "message"; the turn is kept, and /resume retries it
+    error       a model API error: "message"; the turn is kept, and a resume retries it
 
 The same shapes describe a stored conversation (GET /api/sessions/{id}), so a UI renders history
 and live turns with one code path. There, the summary that replaced older messages after a
@@ -29,7 +29,6 @@ compaction is a "compaction" item holding the summary text.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from runtime.compaction import SUMMARY_HEADER
@@ -39,11 +38,6 @@ from runtime.state import SessionState
 from runtime.tool_summary import summarize
 
 MAX_OUTPUT_CHARS = 4_000
-
-
-def sse(event_type: str, data: dict[str, Any]) -> str:
-    """One Server-Sent Event."""
-    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 def to_wire(item: Event | StreamDelta, state: SessionState) -> tuple[str, dict[str, Any]] | None:

@@ -16,7 +16,7 @@ from runtime.compaction import summary_message_text
 from runtime.session import Session
 from runtime.state import SessionState
 from runtime.tools import ToolRegistry
-from tests.api_helpers import ECHO, make_agent, parse_sse
+from tests.api_helpers import ECHO, drain, make_agent, tab
 from tests.fake_model import FakeModel, call, say
 
 
@@ -121,17 +121,22 @@ def test_conversation_items_get_the_ids_of_their_turns_even_after_a_compaction()
         ("user_message", "r4"), ("assistant_message", "r4")]
 
 
-async def test_the_api_streams_and_returns_the_request_id(db):
+async def test_the_live_events_and_the_api_carry_the_request_id(db):
     with EventLog(db) as log:
         app = create_app(make_agent([say("one"), say("two")]), log)
+        turns = app.state.turns
+        client = tab(turns)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as http:
             sid = (await http.post("/api/sessions")).json()["id"]
-            first = parse_sse((await http.post(f"/api/sessions/{sid}/messages", json={"text": "a"})).text, keep_ids=True)
-            second = parse_sse((await http.post(f"/api/sessions/{sid}/messages", json={"text": "b"})).text, keep_ids=True)
+            await turns.start(sid, "a")
+            first = [m for m in drain(client) if m["type"] == "event"]
+            await turns.start(sid, "b")
+            second = [m for m in drain(client) if m["type"] == "event"]
             stored = (await http.get(f"/api/sessions/{sid}")).json()
 
-        rid1, rid2 = first[0][1]["request_id"], second[0][1]["request_id"]
+        rid1, rid2 = first[0]["data"]["request_id"], second[0]["data"]["request_id"]
         assert is_uuid(rid1) and rid1 != rid2
-        assert first[-1][1]["request_id"] == rid1 and second[-1][1]["request_id"] == rid2
+        assert first[-1]["data"]["request_id"] == rid1 and second[-1]["data"]["request_id"] == rid2
+        assert {m["request_id"] for m in first} == {rid1} and {m["request_id"] for m in second} == {rid2}
         assert [i["request_id"] for i in stored["items"]] == [rid1, rid1, rid2, rid2]
         assert [e.type for e in log.load_request(sid, rid2)] == ["user_message", "assistant_message"]

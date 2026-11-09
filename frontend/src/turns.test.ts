@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEvent } from "./api";
-import { applyEvent, fromItems, newTurn, type Turn } from "./turns";
+import { applyEvent, fromItems, fromSnapshot, mergeTurns, newTurn, type Turn } from "./turns";
 import type { StreamEvent } from "./types";
 import { stampText, tilt } from "./tools";
 
@@ -67,10 +66,61 @@ describe("a stored conversation", () => {
   });
 });
 
-describe("the stream", () => {
-  it("parses events and skips pings", () => {
-    expect(parseEvent('event: text\ndata: {"delta": "hi"}')).toEqual({ event: "text", data: { delta: "hi" } });
-    expect(parseEvent(": ping")).toBeNull();
+describe("a turn picked up after a reconnect", () => {
+  it("is rebuilt from the events so far, question included", () => {
+    const turn = fromSnapshot({
+      session_id: "s1",
+      request_id: "r2",
+      base: [],
+      events: [
+        { event: "user_message", data: { text: "Does Acme sponsor?", request_id: "r2" } },
+        { event: "reasoning", data: { delta: "Look it up." } },
+        { event: "tool_started", data: { id: "c1", name: "match_employer", arguments: { name: "Acme" } } },
+      ],
+    });
+    expect(turn.question).toBe("Does Acme sponsor?");
+    expect(turn.requestId).toBe("r2");
+    expect(turn.steps.map((s) => s.kind)).toEqual(["thinking", "tools"]);
+    expect(turn.end).toBeUndefined();
+  });
+
+  it("keeps a resumed turn's earlier steps", () => {
+    const turn = fromSnapshot({
+      session_id: "s1",
+      request_id: "r1",
+      base: [
+        { type: "user_message", text: "Does Acme sponsor?", request_id: "r1" },
+        { type: "assistant_message", text: "", reasoning: "", tool_calls: [{ id: "c1", name: "match_employer", arguments: {} }], request_id: "r1" },
+        { type: "tool_finished", id: "c1", name: "match_employer", summary: "Match: exact.", output: "…", is_error: false, request_id: "r1" },
+      ],
+      events: [{ event: "text", data: { delta: "Yes." } }],
+    });
+    expect(turn.steps.map((s) => s.kind)).toEqual(["tools", "answer"]);
+  });
+});
+
+describe("showing a conversation", () => {
+  const stored = fromItems([
+    { type: "user_message", text: "first", request_id: "r1" },
+    { type: "assistant_message", text: "one", reasoning: "", tool_calls: [], request_id: "r1" },
+    { type: "user_message", text: "second", request_id: "r2" },
+  ]);
+
+  it("puts the live turn in place of its stored copy", () => {
+    const live = { ...newTurn("second"), requestId: "r2", steps: [{ kind: "answer" as const, text: "two so far" }] };
+    const shown = mergeTurns(stored, live);
+    expect(shown.map((t) => t.question)).toEqual(["first", "second"]);
+    expect(shown[1].steps).toEqual(live.steps);
+    expect(shown[1].key).toBe("r2");
+  });
+
+  it("adds a live turn that isn't stored yet at the end", () => {
+    const shown = mergeTurns(stored.slice(0, 1), newTurn("just asked"));
+    expect(shown.map((t) => t.question)).toEqual(["first", "just asked"]);
+  });
+
+  it("is the stored turns when nothing is live", () => {
+    expect(mergeTurns(stored, undefined)).toBe(stored);
   });
 });
 
