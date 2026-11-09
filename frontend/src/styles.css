@@ -239,6 +239,113 @@ a {
   box-shadow: inset 2px 0 0 var(--stamp);
 }
 
+.history__row {
+  position: relative;
+  overflow: hidden;
+}
+
+.history__row .history__item {
+  padding-right: 2.1rem;
+}
+
+/* The bin sits over the end of the title, shown on hover or keyboard focus (always on touch). */
+.history__delete {
+  position: absolute;
+  top: 50%;
+  right: 0.25rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.9);
+  transition: opacity 0.15s ease, transform 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.history__row:hover .history__delete,
+.history__row:focus-within .history__delete {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.history__delete:hover,
+.history__delete:focus-visible {
+  color: var(--refused);
+  background: color-mix(in srgb, var(--refused) 12%, transparent);
+}
+
+@media (hover: none) {
+  .history__delete {
+    opacity: 0.75;
+    transform: translateY(-50%);
+  }
+}
+
+.history__confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.3rem 0.28rem 0.55rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--refused) 9%, var(--paper-raised));
+  box-shadow: inset 2px 0 0 var(--refused);
+  animation: confirm-in 0.18s ease-out;
+}
+
+.history__confirm-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history__confirm-delete,
+.history__confirm-keep {
+  flex: none;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.history__confirm-delete {
+  border: 0;
+  background: var(--refused);
+  color: var(--paper);
+}
+
+.history__confirm-delete:hover {
+  background: color-mix(in srgb, var(--refused) 85%, var(--ink));
+}
+
+.history__confirm-keep {
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.history__confirm-keep:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+@keyframes confirm-in {
+  from {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+}
+
 .history__empty {
   padding: 0 0.55rem;
   font-size: 0.9rem;

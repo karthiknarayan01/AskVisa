@@ -2,8 +2,9 @@
 
 Every state change in the runtime (a user message, a model reply, a tool starting,
 a tool finishing, an approval decision, a compaction) is written here as one event
-BEFORE the runtime acts on it. Nothing is ever updated or deleted, and all other state
-is rebuilt by replaying a session's events. If `append()` returned, the event is on disk,
+BEFORE the runtime acts on it. Events are never updated, and are deleted only together with
+their whole session (delete_session); all other state is rebuilt by replaying a session's
+events. If `append()` returned, the event is on disk,
 so a restarted process sees exactly what the dead one saw.
 
 Tables (created by runtime/migrations/0001_create_sessions_and_events.sql, with request_id
@@ -12,7 +13,7 @@ added by 0002_add_request_id_to_events.sql):
     sessions(session_id PK, created_at)
     events(seq INTEGER PK, session_id FK, type, payload JSON, ts, request_id)
 
-`seq` is assigned by SQLite on insert and only ever increases, so ordering a session's
+`seq` is assigned by SQLite on insert, above every seq in the table, so ordering a session's
 events by seq gives the order they were appended in. It is a 64-bit integer, so it can't run
 out in practice. `request_id` groups the events of one user request (a turn): its user
 message, every model step and tool call, and how it ended. load_request() reads one request.
@@ -144,6 +145,22 @@ class EventLog:
             (session_id, request_id),
         ).fetchall()
         return [Event(session_id, seq, t, json.loads(p), ts, request_id) for seq, t, p, ts in rows]
+
+    def delete_session(self, session_id: str) -> None:
+        """Delete a session and all its events, in one transaction. Raises UnknownSession.
+
+        The only way events are ever removed.
+        """
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
+            deleted = self._conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,)).rowcount
+            if not deleted:
+                raise UnknownSession(session_id)
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
+        self._conn.execute("COMMIT")
 
     def has_session(self, session_id: str) -> bool:
         """True if `new_session` created this id."""

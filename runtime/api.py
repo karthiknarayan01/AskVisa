@@ -8,6 +8,8 @@
     POST   /api/sessions/{id}/messages       {"text"} -> the turn as text/event-stream (see api_events)
     POST   /api/sessions/{id}/resume         finish an interrupted turn, streamed the same way
     POST   /api/sessions/{id}/cancel         stop the running turn: 202, or 409 if none is running
+    DELETE /api/sessions/{id}                delete the session and its history: 204 (a running
+                                             turn is stopped first)
 
 Errors are JSON {"detail": "..."}: 404 for an unknown session, 409 when a turn is already running
 or the last one was interrupted (resume it), 422 for an empty message.
@@ -25,7 +27,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from runtime.agent import Agent
@@ -109,6 +111,14 @@ def create_app(
         if not turns.cancel(session_id):
             raise HTTPException(409, "no turn is running")
         return {"cancelling": True}
+
+    @app.delete("/api/sessions/{session_id}", status_code=204)
+    async def delete_session(session_id: str) -> Response:
+        try:
+            await turns.delete(session_id)
+        except UnknownSession:
+            raise HTTPException(404, f"no session {session_id}") from None
+        return Response(status_code=204)
 
     if static_dir is not None and (static_dir / "index.html").is_file():
         root = static_dir.resolve()

@@ -23,6 +23,10 @@ export const api = {
   session: (id: string) => fetch(`/api/sessions/${id}`).then((r) => json<StoredSession>(r)),
   create: () => fetch("/api/sessions", { method: "POST" }).then((r) => json<{ id: string }>(r)),
   cancel: (id: string) => fetch(`/api/sessions/${id}/cancel`, { method: "POST" }),
+  remove: async (id: string) => {
+    const response = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+    if (!response.ok && response.status !== 404) await json(response);
+  },
 };
 
 /** Send a message (or resume an interrupted turn) and call onEvent for each event as it arrives. */
