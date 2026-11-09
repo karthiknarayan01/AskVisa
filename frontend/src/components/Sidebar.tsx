@@ -113,6 +113,7 @@ function HistoryRow({ session, current, onOpen, onDelete }: RowProps) {
             aria-current={current ? "page" : undefined}
             onClick={(e) => { e.preventDefault(); onOpen(); }}
           >
+            {session.running && <span className="history__running" aria-label="Answering" title="Answering" />}
             {session.title}
           </a>
           <button

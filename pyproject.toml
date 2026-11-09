@@ -7,7 +7,7 @@ name = "askvisa"
 version = "0.1.0"
 description = "AskVisa: an assistant for US immigration questions about visas, status, green cards and citizenship"
 requires-python = ">=3.11"
-dependencies = ["anthropic>=0.40", "openai>=1.50", "jsonschema>=4", "ddgs>=9", "rich>=13", "ollama>=0.6", "httpx>=0.27", "fastapi>=0.115", "uvicorn>=0.30"]
+dependencies = ["anthropic>=0.40", "openai>=1.50", "jsonschema>=4", "ddgs>=9", "rich>=13", "ollama>=0.6", "httpx>=0.27", "fastapi>=0.115", "uvicorn>=0.30", "websockets>=13"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23"]

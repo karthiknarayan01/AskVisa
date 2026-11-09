@@ -1,11 +1,12 @@
 // The message box: Enter sends, Shift+Enter adds a line, Escape stops a running answer.
+// While the connection is down (offline) you can keep typing; sending waits until it's back.
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { SendIcon, StopIcon } from "./icons";
 
-type Props = { running: boolean; disabled: boolean; onSend: (text: string) => void; onStop: () => void };
+type Props = { running: boolean; disabled: boolean; offline: boolean; onSend: (text: string) => void; onStop: () => void };
 
-export function Composer({ running, disabled, onSend, onStop }: Props) {
+export function Composer({ running, disabled, offline, onSend, onStop }: Props) {
   const [text, setText] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
 
@@ -17,7 +18,7 @@ export function Composer({ running, disabled, onSend, onStop }: Props) {
   }, [text]);
 
   const send = () => {
-    if (!text.trim() || running || disabled) return;
+    if (!text.trim() || running || disabled || offline) return;
     onSend(text);
     setText("");
   };
@@ -50,7 +51,7 @@ export function Composer({ running, disabled, onSend, onStop }: Props) {
           <StopIcon />
         </button>
       ) : (
-        <button type="submit" className="composer__button" disabled={!text.trim() || disabled} aria-label="Send">
+        <button type="submit" className="composer__button" disabled={!text.trim() || disabled || offline} aria-label="Send">
           <SendIcon />
         </button>
       )}

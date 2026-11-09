@@ -1,5 +1,5 @@
-// The API's shapes (runtime/api_events.py). A stored conversation and a live turn use the same
-// item types, so history and streaming render with the same components.
+// The API's shapes (runtime/api_events.py, runtime/live.py). A stored conversation and a live
+// turn use the same item types, so history and streaming render with the same components.
 
 export type ToolCall = { id: string; name: string; arguments: Record<string, unknown> };
 
@@ -24,7 +24,7 @@ export type Item =
     }
   | { type: "compaction"; summary?: string; request_id: string | null };
 
-export type SessionSummary = { id: string; title: string; created_at: string; updated_at: string };
+export type SessionSummary = { id: string; title: string; created_at: string; updated_at: string; running?: boolean };
 
 export type StoredSession = {
   id: string;
@@ -55,3 +55,18 @@ export type StreamEvent =
   | { event: "compaction"; data: { replaced_count: number } }
   | { event: "turn_stopped"; data: { reason: string } }
   | { event: "end"; data: EndEvent };
+
+/** A turn that is running, as the server's hello describes it to a tab that has just connected. */
+export type RunningTurn = {
+  session_id: string;
+  request_id: string | null;
+  base: Item[];
+  events: StreamEvent[];
+};
+
+export type ServerMessage =
+  | { type: "hello"; running: RunningTurn[] }
+  | ({ type: "event"; session_id: string; request_id: string | null } & StreamEvent)
+  | { type: "session"; session: SessionSummary }
+  | { type: "session_deleted"; session_id: string }
+  | { type: "error"; session_id: string | null; message: string };

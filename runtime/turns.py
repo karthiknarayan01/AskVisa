@@ -1,35 +1,33 @@
-"""Sessions for the server: opening them, running one turn at a time each, streaming it, stopping it.
+"""Sessions for the server: opening them, running one turn at a time each, publishing it live.
 
-    turns = Turns(log, agent)
+    turns = Turns(log, agent, live)
     session = turns.session(session_id)          opened once, then kept in memory
-    async for chunk in turns.stream(session_id, "question"):   Server-Sent Events, ending with `end`
+    await turns.start(session_id, "question")    the turn runs; its events go to every tab
     turns.cancel(session_id)                     stop the running turn
     await turns.delete(session_id)               stop it if running, then delete the session
 
-A turn runs as its own task, not inside the HTTP response. If the browser disconnects, only the
-stream stops: the turn finishes and is saved, and the conversation shows it when reopened, the
-way chat apps behave. One turn runs per session at a time; starting another raises TurnBusy.
+A turn runs as its own task, not tied to any connection. If a tab disconnects, the turn
+finishes and is saved, and a tab that connects later is sent everything it has done so far
+(snapshot()) before its live events. One turn runs per session at a time; starting another
+raises TurnBusy.
 
-A turn interrupted by a crash stays open in the log. stream() refuses a new message for such a
-session (TurnInterrupted); stream_resume() finishes it instead, streamed the same way.
-
-While a turn runs, a comment line (": ping") is sent whenever nothing else has been sent for
-PING_SECONDS, so proxies and browsers don't drop a stream while a local model thinks.
+A turn interrupted by a crash stays open in the log. start() refuses a new message for such a
+session (TurnInterrupted); resume() finishes it instead.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 from runtime.agent import Agent
-from runtime.api_events import sse, to_wire
+from runtime.api_events import conversation, to_wire
 from runtime.events import EventLog
+from runtime.live import LiveChannel
 from runtime.model import ModelError
 from runtime.session import CompactionFailed, MaxStepsReached, ReplyTruncated, Session, TurnResult
-
-PING_SECONDS = 15
 
 
 class TurnBusy(RuntimeError):
@@ -40,12 +38,25 @@ class TurnInterrupted(RuntimeError):
     """The session's last turn was interrupted and must be resumed before a new message."""
 
 
+@dataclass
+class RunningTurn:
+    """A turn while it runs: everything a tab needs to show it from the start."""
+
+    session_id: str
+    request_id: str | None
+    base: list[dict[str, Any]]                  # items recorded before this run (a resumed turn)
+    events: list[dict[str, Any]] = field(default_factory=list)   # {"event", "data"}, in order
+    task: asyncio.Task | None = None            # the turn itself
+    done: asyncio.Task | None = None            # finishes once `end` has been published
+
+
 class Turns:
-    def __init__(self, log: EventLog, agent: Agent):
+    def __init__(self, log: EventLog, agent: Agent, live: LiveChannel | None = None):
         self.log = log
         self.agent = agent
+        self.live = live or LiveChannel()
         self._sessions: dict[str, Session] = {}
-        self._running: dict[str, asyncio.Task] = {}
+        self._running: dict[str, RunningTurn] = {}
 
     def create(self) -> Session:
         session = Session.create(self.log, self.agent.model, self.agent.tools, **self.agent.session_options())
@@ -63,46 +74,67 @@ class Turns:
     def is_running(self, session_id: str) -> bool:
         return session_id in self._running
 
-    def stream(self, session_id: str, text: str) -> AsyncIterator[str]:
-        """Start a turn for `text` and stream it. Raises TurnBusy or TurnInterrupted first."""
+    def start(self, session_id: str, text: str) -> asyncio.Task:
+        """Start a turn for `text`. Returns a task that finishes when the turn has ended and its
+        `end` event is published. Raises UnknownSession, TurnBusy or TurnInterrupted first."""
         session = self.session(session_id)
         self._refuse_if_running(session_id)
         if session.needs_resume:
             raise TurnInterrupted("the last turn was interrupted; resume it first")
-        return self._start(session, lambda: session.run_turn(text))
+        return self._start(session, lambda: session.run_turn(text), base=[])
 
-    def stream_resume(self, session_id: str) -> AsyncIterator[str]:
-        """Finish an interrupted turn and stream it. Raises TurnBusy, or ValueError if nothing to resume."""
+    def resume(self, session_id: str) -> asyncio.Task:
+        """Finish an interrupted turn, published the same way. Raises UnknownSession, TurnBusy,
+        or ValueError if there is nothing to resume."""
         session = self.session(session_id)
         self._refuse_if_running(session_id)
         if not session.needs_resume:
             raise ValueError("there is no interrupted turn to resume")
-        return self._start(session, session.resume)
+        rid = session.state.request_id
+        base = [i for i in conversation(session.state, self._request_ids(session_id)) if i["request_id"] == rid]
+        return self._start(session, session.resume, base=base)
 
     def cancel(self, session_id: str) -> bool:
         """Stop the running turn; False if none is running."""
-        task = self._running.get(session_id)
-        if task is None:
+        running = self._running.get(session_id)
+        if running is None or running.task is None:
             return False
-        task.cancel()
+        running.task.cancel()
         return True
 
     async def delete(self, session_id: str) -> None:
-        """Delete the session and its events. A running turn is stopped first and waited for,
-        so it can't write to the session after it is gone. Raises UnknownSession."""
-        while (task := self._running.get(session_id)) is not None:  # a turn started while waiting is stopped too
-            task.cancel()
-            await asyncio.wait([task])
+        """Delete the session and its events, and tell every tab. A running turn is stopped first
+        and waited for, so it can't write to the session after it is gone. Raises UnknownSession."""
+        while (running := self._running.get(session_id)) is not None:  # one started meanwhile too
+            self.cancel(session_id)
+            await asyncio.wait([running.done])
         self.log.delete_session(session_id)
         self._sessions.pop(session_id, None)
+        self.live.publish({"type": "session_deleted", "session_id": session_id})
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        """Every running turn so far, for a tab that has just connected."""
+        return [
+            {"session_id": r.session_id, "request_id": r.request_id, "base": r.base, "events": list(r.events)}
+            for r in self._running.values()
+        ]
+
+    def summary(self, session_id: str) -> dict[str, Any]:
+        """A session as the sessions list shows it. Raises UnknownSession."""
+        s = self.log.session_summary(session_id)
+        return {"id": s.session_id, "title": s.title, "created_at": s.created_at,
+                "updated_at": s.updated_at, "running": self.is_running(session_id)}
 
     def _refuse_if_running(self, session_id: str) -> None:
         # A running turn is also an open one, so this is checked before needs_resume.
         if session_id in self._running:
             raise TurnBusy("a turn is already running in this session")
 
-    def _start(self, session: Session, run: Callable[[], Awaitable[TurnResult | None]]) -> AsyncIterator[str]:
-        """Run the turn as a task and return the stream of its events."""
+    def _request_ids(self, session_id: str) -> list[str | None]:
+        return [e.request_id for e in self.log.load(session_id) if e.type == "user_message"]
+
+    def _start(self, session: Session, run: Callable[[], Awaitable[TurnResult | None]], base: list) -> asyncio.Task:
+        """Run the turn as a task, and publish its events from a second task that follows it."""
         sid = session.session_id
         events = session.subscribe()
 
@@ -113,36 +145,37 @@ class Turns:
                 session.cancel()
                 raise
 
-        task = asyncio.create_task(turn())
-        self._running[sid] = task
+        running = RunningTurn(sid, session.state.request_id if base else None, base)
+        running.task = task = asyncio.create_task(turn())
+        task.add_done_callback(lambda _: events.close())
+        self._running[sid] = running
+        running.done = asyncio.create_task(self._publish(session, events, task, running))
+        return running.done
 
-        def finished(t: asyncio.Task) -> None:
-            self._running.pop(sid, None)
-            events.close()
-            if not t.cancelled():
-                t.exception()  # retrieved here; reported to the stream by end_event()
+    async def _publish(self, session: Session, events: Any, task: asyncio.Task, running: RunningTurn) -> None:
+        """Send each of the turn's events to every tab, keep it for tabs that connect later,
+        then `end` once the turn has finished."""
+        sid = session.session_id
+        async for item in events:
+            wire = to_wire(item, session.state)
+            if wire is None:
+                continue
+            name, data = wire
+            if name == "user_message":
+                running.request_id = data["request_id"]
+            self._emit(running, name, data)
+            if name == "user_message":
+                self.live.publish({"type": "session", "session": self.summary(sid)})
+        await asyncio.wait([task])
+        self._running.pop(sid, None)
+        self._emit(running, "end", {**end_event(task), "request_id": session.state.request_id})
+        if self.log.has_session(sid):
+            self.live.publish({"type": "session", "session": self.summary(sid)})
 
-        task.add_done_callback(finished)
-        return self._follow(session, events, task)
-
-    async def _follow(self, session: Session, events: Any, task: asyncio.Task) -> AsyncIterator[str]:
-        """The turn's events as SSE, a ping while quiet, and `end` last. Stops early on disconnect."""
-        iterator = aiter(events)
-        try:
-            while True:
-                try:
-                    item = await asyncio.wait_for(anext(iterator), PING_SECONDS)
-                except asyncio.TimeoutError:
-                    yield ": ping\n\n"
-                    continue
-                except StopAsyncIteration:
-                    break
-                wire = to_wire(item, session.state)
-                if wire is not None:
-                    yield sse(*wire)
-            yield sse("end", {**end_event(task), "request_id": session.state.request_id})
-        finally:
-            events.close()
+    def _emit(self, running: RunningTurn, name: str, data: dict[str, Any]) -> None:
+        running.events.append({"event": name, "data": data})
+        self.live.publish({"type": "event", "session_id": running.session_id,
+                           "request_id": running.request_id, "event": name, "data": data})
 
 
 def end_event(task: asyncio.Task) -> dict[str, Any]:

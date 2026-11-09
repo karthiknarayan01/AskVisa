@@ -2,7 +2,7 @@
 // Built from a stored conversation (fromItems) and kept up to date from live events (applyEvent),
 // so history and a streaming answer render the same way.
 
-import type { EndEvent, Item, StreamEvent, ToolCall } from "./types";
+import type { EndEvent, Item, RunningTurn, StreamEvent, ToolCall } from "./types";
 
 export type ToolView = {
   id: string;
@@ -41,6 +41,7 @@ export function fromItems(items: Item[]): Turn[] {
   for (const item of items) {
     if (item.type === "user_message") {
       current = { ...newTurn(item.text), requestId: item.request_id };
+      if (item.request_id) current.key = item.request_id;
       turns.push(current);
       continue;
     }
@@ -65,6 +66,7 @@ export function applyEvent(turn: Turn, event: StreamEvent): Turn {
   switch (event.event) {
     case "user_message":
       next.requestId = event.data.request_id;
+      if (!next.question) next.question = event.data.text;
       break;
     case "reasoning":
     case "text": {
@@ -100,6 +102,25 @@ export function applyEvent(turn: Turn, event: StreamEvent): Turn {
       break;
   }
   return next;
+}
+
+/** A running turn from the server's hello: its earlier steps (a resumed turn), then its events. */
+export function fromSnapshot(running: RunningTurn): Turn {
+  const base = fromItems(running.base);
+  let turn: Turn = base.length ? base[base.length - 1] : newTurn("");
+  turn = { ...turn, requestId: running.request_id ?? turn.requestId };
+  for (const event of running.events) turn = applyEvent(turn, event);
+  return turn;
+}
+
+/** The conversation to show: the stored turns, with the live one (running, or the last one this
+ * tab followed) in place of its stored copy, or after them while it isn't stored yet. */
+export function mergeTurns(history: Turn[], live: Turn | undefined): Turn[] {
+  if (!live) return history;
+  const shown = live.requestId ? { ...live, key: live.requestId } : live;
+  const at = live.requestId ? history.findIndex((t) => t.requestId === live.requestId) : -1;
+  if (at === -1) return [...history, shown];
+  return [...history.slice(0, at), shown, ...history.slice(at + 1)];
 }
 
 function addReply(turn: Turn, reasoning: string, text: string, calls: ToolCall[], status: ToolView["status"]) {

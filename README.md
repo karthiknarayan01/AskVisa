@@ -78,7 +78,7 @@ AskVisa gives general information, not legal advice. Immigration decisions can b
 <br>
 
 - `./eval.sh` runs the eval suites: whether the agent picks the right lookup, gets the dates right and reasons through a case. They run fully local on Qwen by default.
-- The server streams answers over a REST API. Its docs are at `http://127.0.0.1:8000/docs` while AskVisa runs.
+- The web app talks to the server over plain HTTP for sessions and one WebSocket (`/api/ws`) that carries every answer live. The HTTP docs are at `http://127.0.0.1:8000/docs` while AskVisa runs.
 - The web app is in `frontend/` (React and Vite): `npm run dev` there runs it against a running server.
 
 </details>

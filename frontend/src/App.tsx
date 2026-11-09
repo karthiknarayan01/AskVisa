@@ -60,6 +60,11 @@ export default function App() {
             <MenuIcon />
           </button>
           <span className="topbar__model">{modelNote}</span>
+          {chat.status === "reconnecting" && (
+            <span className="topbar__status" role="status">
+              <span className="topbar__status-dot" aria-hidden="true" /> Reconnecting…
+            </span>
+          )}
         </header>
         <div className="scroller" ref={scroller} onScroll={onScroll}>
           <div className="column">
@@ -86,7 +91,7 @@ export default function App() {
         </div>
         <div className="dock">
           {chat.error && <p className="dock__error" role="alert">{chat.error}</p>}
-          <Composer running={chat.running} disabled={!chat.model} onSend={send} onStop={chat.stop} />
+          <Composer running={chat.running} disabled={!chat.model} offline={chat.status !== "open"} onSend={send} onStop={chat.stop} />
           <p className="dock__note">General information, not legal advice. For decisions that matter, talk to an immigration attorney.</p>
         </div>
       </main>

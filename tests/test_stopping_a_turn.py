@@ -11,7 +11,7 @@ from runtime.ollama_model import OllamaModel
 from runtime.permtracker_tools import PermTrackerClient, permtracker_tools
 from runtime.tools import Tool, ToolRegistry
 from runtime.turns import Turns
-from tests.api_helpers import collect, make_log, parse_sse
+from tests.api_helpers import drain, events, make_log, tab
 from tests.fake_model import FakeModel, call, say
 
 
@@ -39,16 +39,18 @@ async def test_stopping_cancels_the_running_tool_and_records_that_the_user_stopp
     with make_log(tmp_path) as log:
         turns = Turns(log, agent)
         sid = turns.create().session_id
-        stream = asyncio.create_task(collect(turns.stream(sid, "question")))
+        client = tab(turns)
+        done = turns.start(sid, "question")
         await wait.started.wait()
 
         assert turns.cancel(sid)
-        events = parse_sse(await stream)
+        await done
+        got = events(drain(client), sid)
 
         assert wait.cancelled
         assert not turns.is_running(sid)
-        assert [kind for kind, _ in events][-2:] == ["turn_stopped", "end"]
-        assert events[-1] == ("end", {"outcome": "cancelled"})
+        assert [kind for kind, _ in got][-2:] == ["turn_stopped", "end"]
+        assert got[-1] == ("end", {"outcome": "cancelled"})
         stored = [(e.type, e.payload) for e in log.load(sid)]
         assert stored[-1] == ("turn_stopped", {"reason": "cancelled"})
         finished = next(payload for kind, payload in stored if kind == "tool_finished")

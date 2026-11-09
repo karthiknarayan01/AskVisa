@@ -1,6 +1,5 @@
 """Deleting a session: its events go, nothing else does, and a running turn is stopped first."""
 
-import asyncio
 import httpx
 import pytest
 
@@ -47,7 +46,7 @@ async def test_the_api_deletes_a_session(tmp_path):
         app = create_app(make_agent([say("one")]), log)
         async with client(app) as http:
             sid = (await http.post("/api/sessions")).json()["id"]
-            await http.post(f"/api/sessions/{sid}/messages", json={"text": "q"})
+            await app.state.turns.start(sid, "q")
 
             assert (await http.delete(f"/api/sessions/{sid}")).status_code == 204
             assert (await http.get(f"/api/sessions/{sid}")).status_code == 404
@@ -61,10 +60,10 @@ async def test_deleting_a_session_stops_its_running_turn_first(tmp_path):
         app = create_app(make_agent([], model), log)
         async with client(app) as http:
             sid = (await http.post("/api/sessions")).json()["id"]
-            streaming = asyncio.create_task(http.post(f"/api/sessions/{sid}/messages", json={"text": "slow"}))
+            done = app.state.turns.start(sid, "slow")
             await model.started.wait()
 
             assert (await http.delete(f"/api/sessions/{sid}")).status_code == 204
-            await streaming
+            assert done.done()
             assert not app.state.turns.is_running(sid)
             assert not log.has_session(sid)

@@ -2,7 +2,7 @@
 
 import json
 
-from runtime.api_events import MAX_OUTPUT_CHARS, conversation, sse, to_wire, tool_result
+from runtime.api_events import MAX_OUTPUT_CHARS, conversation, to_wire, tool_result
 from runtime.compaction import summary_message_text
 from runtime.events import Event
 from runtime.messages import Message, ToolCall
@@ -12,10 +12,6 @@ from runtime.state import SessionState, ToolCallState
 
 def event(type_, **payload):
     return Event("s", 1, type_, payload, "t")
-
-
-def test_sse_format():
-    assert sse("text", {"delta": "hé"}) == 'event: text\ndata: {"delta": "hé"}\n\n'
 
 
 def test_deltas_become_text_and_reasoning():

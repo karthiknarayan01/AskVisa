@@ -178,18 +178,29 @@ class EventLog:
 
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
         """The most recently active sessions first, each titled by its first user message."""
+        return self._summaries("", (limit,))
+
+    def session_summary(self, session_id: str) -> SessionSummary:
+        """One session's summary, as list_sessions gives it. Raises UnknownSession."""
+        found = self._summaries("WHERE s.session_id = ?", (session_id, 1))
+        if not found:
+            raise UnknownSession(session_id)
+        return found[0]
+
+    def _summaries(self, where: str, params: tuple[Any, ...]) -> list[SessionSummary]:
         rows = self._conn.execute(
-            """
+            f"""
             SELECT s.session_id, s.created_at, COALESCE(MAX(e.ts), s.created_at) AS updated_at,
                    (SELECT payload FROM events
                      WHERE session_id = s.session_id AND type = 'user_message'
                      ORDER BY seq LIMIT 1) AS first_message
               FROM sessions s LEFT JOIN events e ON e.session_id = s.session_id
+             {where}
              GROUP BY s.session_id
              ORDER BY updated_at DESC, s.rowid DESC
              LIMIT ?
             """,
-            (limit,),
+            params,
         ).fetchall()
         return [
             SessionSummary(sid, created, updated, json.loads(first)["text"] if first else "")

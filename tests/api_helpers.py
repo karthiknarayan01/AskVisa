@@ -1,9 +1,8 @@
-"""Shared helpers for the API tests: an agent on a scripted model, and reading an SSE stream."""
+"""Shared helpers for the API tests: an agent on a scripted model, and a tab on the live channel."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 
 from runtime.agent import Agent
 from runtime.events import EventLog
@@ -30,25 +29,31 @@ def make_log(tmp_path) -> EventLog:
     return EventLog(db)
 
 
-def parse_sse(text: str, keep_ids: bool = False) -> list[tuple[str, dict]]:
-    """The events in an SSE body, skipping comment lines (pings). request_id is dropped unless
-    keep_ids, so tests about other fields can compare whole events."""
-    events = []
-    for block in text.split("\n\n"):
-        lines = [line for line in block.split("\n") if line and not line.startswith(":")]
-        if not lines:
+def tab(turns):
+    """A connected tab, as the WebSocket handler makes one: its hello, then everything published."""
+    return turns.live.connect({"type": "hello", "running": turns.snapshot()})
+
+
+def drain(client) -> list[dict]:
+    """Every message queued for the tab so far."""
+    messages = []
+    while not client.outbox.empty():
+        messages.append(client.outbox.get_nowait())
+    return messages
+
+
+def events(messages: list[dict], session_id: str | None = None, keep_ids: bool = False) -> list[tuple[str, dict]]:
+    """The turn events in a tab's messages, optionally for one session, as (event, data).
+    request_id is dropped from data unless keep_ids, so tests can compare whole events."""
+    found = []
+    for m in messages:
+        if m["type"] != "event" or (session_id is not None and m["session_id"] != session_id):
             continue
-        kind = next(line[len("event: "):] for line in lines if line.startswith("event: "))
-        data = next(line[len("data: "):] for line in lines if line.startswith("data: "))
-        payload = json.loads(data)
+        data = dict(m["data"])
         if not keep_ids:
-            payload.pop("request_id", None)
-        events.append((kind, payload))
-    return events
-
-
-async def collect(stream) -> str:
-    return "".join([chunk async for chunk in stream])
+            data.pop("request_id", None)
+        found.append((m["event"], data))
+    return found
 
 
 class BlockingModel:
