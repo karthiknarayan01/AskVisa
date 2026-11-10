@@ -22,7 +22,14 @@ case "$1" in
     pull) touch "$FAKE_DIR/pulled" ;;
 esac
 """
-FAKE_CURL = '#!/bin/sh\n[ -f "$FAKE_DIR/up" ]\n'
+# The Ollama API answers once `ollama serve` ran; AskVisa's own health URL only when a test says
+# an earlier server is still running.
+FAKE_CURL = """#!/bin/sh
+case "$*" in
+    *"/api/health"*) [ -f "$FAKE_DIR/serving" ] ;;
+    *) [ -f "$FAKE_DIR/up" ] ;;
+esac
+"""
 FAKE_NPM = """#!/bin/sh
 echo "$*" >> "$FAKE_DIR/npm.log"
 if [ "$1 $2" = "run build" ]; then mkdir -p dist && echo app > dist/index.html; fi
@@ -89,6 +96,18 @@ def test_first_run_with_qwen_starts_ollama_downloads_the_model_and_opens_the_cha
     assert f"ARGS --provider ollama --model {model}" in result.stdout
     assert f"MODEL={model}" in config(env).read_text()
     assert stat.S_IMODE(config(env).stat().st_mode) == 0o600
+
+
+def test_a_server_already_running_on_the_port_is_named_instead_of_opened(env):
+    run(env, "1\n")
+    (Path(env["FAKE_DIR"]) / "serving").touch()
+
+    result = run(env, "", "--port", "9100")
+
+    assert result.returncode == 1
+    assert "AskVisa is already running on port 9100" in result.stderr
+    assert "pkill -f askvisa-server" in result.stderr
+    assert "ARGS" not in result.stdout
 
 
 def test_later_runs_skip_the_choice_and_the_download(env):

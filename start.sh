@@ -132,23 +132,40 @@ save_config() {
 launch() {
     [[ -n "$ANTHROPIC_KEY" && -z "${ANTHROPIC_API_KEY:-}" ]] && export ANTHROPIC_API_KEY="$ANTHROPIC_KEY"
     [[ -n "$DEEPSEEK_KEY" && -z "${DEEPSEEK_API_KEY:-}" ]] && export DEEPSEEK_API_KEY="$DEEPSEEK_KEY"
+    refuse_if_already_serving "$@"
     open_browser_when_ready "$@"
     exec "$VENV/bin/askvisa-server" --provider "$PROVIDER" --model "$MODEL" "$@"
+}
+
+refuse_if_already_serving() {
+    # A server still running on the port would keep the new one from starting, and the browser
+    # would open the old one, with the old app. Say so instead.
+    local port
+    port="$(server_port "$@")"
+    if curl -fsS --max-time 1 "http://127.0.0.1:$port/api/health" >/dev/null 2>&1; then
+        fail "AskVisa is already running on port $port. Stop it first (pkill -f askvisa-server), or start this one on another port: ./start.sh --port 9000"
+    fi
+}
+
+server_port() {
+    # The --port given to askvisa-server, or its default.
+    local port=8000 previous=""
+    for arg in "$@"; do
+        [[ "$previous" == "--port" ]] && port="$arg"
+        previous="$arg"
+    done
+    printf '%s\n' "$port"
 }
 
 open_browser_when_ready() {
     # Open the app in the browser once the server answers. Skipped without a browser opener,
     # or when ASKVISA_NO_BROWSER is set.
     [[ -z "${ASKVISA_NO_BROWSER:-}" ]] || return 0
-    local opener="" port=8000 previous=""
+    local opener=""
     command -v open >/dev/null 2>&1 && [[ "$(uname)" == "Darwin" ]] && opener=open
     command -v xdg-open >/dev/null 2>&1 && opener="${opener:-xdg-open}"
     [[ -n "$opener" ]] || return 0
-    for arg in "$@"; do
-        [[ "$previous" == "--port" ]] && port="$arg"
-        previous="$arg"
-    done
-    local url="http://127.0.0.1:$port"
+    local url="http://127.0.0.1:$(server_port "$@")"
     (
         for _ in $(seq 1 60); do
             curl -fsS --max-time 1 "$url/api/health" >/dev/null 2>&1 && exec "$opener" "$url"

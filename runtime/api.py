@@ -20,6 +20,8 @@ isn't dropped while a local model thinks. Interactive docs for the HTTP part are
 
 Given `static_dir` (the built web app, frontend/dist), the app is served too: its files as they
 are, and index.html for any other path outside /api, so /c/<session id> opens in the app.
+index.html is sent with Cache-Control: no-cache, so a browser always checks for a newer build;
+the files under assets/ have a content hash in their names, so they are cached for good.
 """
 
 from __future__ import annotations
@@ -41,6 +43,8 @@ from runtime.turns import TurnBusy, TurnInterrupted, Turns
 
 MAX_MESSAGE_CHARS = 20_000
 MAX_TITLE_CHARS = 120
+REVALIDATE = "no-cache"                               # may be kept, but checked before each use
+IMMUTABLE = "public, max-age=31536000, immutable"     # named by content hash: never changes
 
 
 class Rename(BaseModel):
@@ -141,9 +145,10 @@ def create_app(
             if path.startswith("api/"):
                 raise HTTPException(404, "no such endpoint")
             file = (root / path).resolve()
-            if path and file.is_file() and file.is_relative_to(root):
-                return FileResponse(file)
-            return FileResponse(root / "index.html")
+            if not (path and file.is_file() and file.is_relative_to(root)):
+                file = root / "index.html"
+            hashed = file.parent == root / "assets"
+            return FileResponse(file, headers={"Cache-Control": IMMUTABLE if hashed else REVALIDATE})
 
     return app
 
