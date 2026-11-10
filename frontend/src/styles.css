@@ -104,8 +104,9 @@ a {
 /* ---- layout ------------------------------------------------------------------------------- */
 
 .app {
+  position: relative;
   display: grid;
-  grid-template-columns: 17.5rem minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 17.5rem) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
   overflow: hidden;
@@ -197,6 +198,50 @@ a {
 }
 
 /* ---- sidebar ------------------------------------------------------------------------------ */
+
+/* A wide, invisible grip over the sidebar's right border; the border itself darkens when it's in use. */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--sidebar-width, 17.5rem);
+  width: 0.6rem;
+  transform: translateX(-50%);
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 5;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background-color 0.15s;
+}
+
+.sidebar-resizer:hover::after,
+.is-resizing .sidebar-resizer::after {
+  background: var(--muted);
+}
+
+.sidebar-resizer:focus-visible::after {
+  background: var(--focus);
+}
+
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+
+.is-resizing,
+.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
 
 .sidebar {
   display: flex;
@@ -1094,6 +1139,10 @@ a {
 
   .sidebar--open {
     transform: none;
+  }
+
+  .sidebar-resizer {
+    display: none;
   }
 
   .sidebar__close,

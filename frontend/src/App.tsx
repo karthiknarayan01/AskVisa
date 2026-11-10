@@ -5,6 +5,7 @@ import { Composer } from "./components/Composer";
 import { EmptyState } from "./components/EmptyState";
 import { MenuIcon } from "./components/icons";
 import { Sidebar } from "./components/Sidebar";
+import { SidebarResizer, useSidebarWidth } from "./components/SidebarResizer";
 import { InkFilter } from "./components/Stamp";
 import { TurnView } from "./components/TurnView";
 import { useChat } from "./useChat";
@@ -12,6 +13,7 @@ import { useChat } from "./useChat";
 export default function App() {
   const chat = useChat();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
 
@@ -48,7 +50,7 @@ export default function App() {
     : "";
 
   return (
-    <div className="app">
+    <div className="app" style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
       <InkFilter />
       <Sidebar
         sessions={chat.sessions}
@@ -59,6 +61,7 @@ export default function App() {
         onRename={chat.rename}
         onDelete={chat.remove}
       />
+      <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
       {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} />}
       <main className="main">
         <header className="topbar">
