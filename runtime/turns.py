@@ -5,6 +5,7 @@
     await turns.start(session_id, "question")    the turn runs; its events go to every tab
     turns.cancel(session_id)                     stop the running turn
     await turns.delete(session_id)               stop it if running, then delete the session
+    turns.rename(session_id, "H-1B layoff")      give it a title, and tell every tab
 
 A turn runs as its own task, not tied to any connection. If a tab disconnects, the turn
 finishes and is saved, and a tab that connects later is sent everything it has done so far
@@ -24,7 +25,7 @@ from typing import Any
 
 from runtime.agent import Agent
 from runtime.api_events import conversation, to_wire
-from runtime.events import EventLog
+from runtime.events import EventLog, SessionSummary
 from runtime.live import LiveChannel
 from runtime.model import ModelError
 from runtime.session import CompactionFailed, MaxStepsReached, ReplyTruncated, Session, TurnResult
@@ -112,6 +113,14 @@ class Turns:
         self._sessions.pop(session_id, None)
         self.live.publish({"type": "session_deleted", "session_id": session_id})
 
+    def rename(self, session_id: str, title: str) -> dict[str, Any]:
+        """Set the session's title (replacing any topic worked out for it), tell every tab, and
+        return the new summary. Raises UnknownSession."""
+        self.log.set_title(session_id, title)
+        summary = self.summary(session_id)
+        self.live.publish({"type": "session", "session": summary})
+        return summary
+
     def snapshot(self) -> list[dict[str, Any]]:
         """Every running turn so far, for a tab that has just connected."""
         return [
@@ -121,9 +130,11 @@ class Turns:
 
     def summary(self, session_id: str) -> dict[str, Any]:
         """A session as the sessions list shows it. Raises UnknownSession."""
-        s = self.log.session_summary(session_id)
+        return self.describe(self.log.session_summary(session_id))
+
+    def describe(self, s: SessionSummary) -> dict[str, Any]:
         return {"id": s.session_id, "title": s.title, "created_at": s.created_at,
-                "updated_at": s.updated_at, "running": self.is_running(session_id)}
+                "updated_at": s.updated_at, "running": self.is_running(s.session_id)}
 
     def _refuse_if_running(self, session_id: str) -> None:
         # A running turn is also an open one, so this is checked before needs_resume.

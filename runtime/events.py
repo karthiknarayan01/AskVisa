@@ -10,7 +10,7 @@ so a restarted process sees exactly what the dead one saw.
 Tables (created by runtime/migrations/0001_create_sessions_and_events.sql, with request_id
 added by 0002_add_request_id_to_events.sql):
 
-    sessions(session_id PK, created_at)
+    sessions(session_id PK, created_at, title)          title added by 0003
     events(seq INTEGER PK, session_id FK, type, payload JSON, ts, request_id)
 
 `seq` is assigned by SQLite on insert, above every seq in the table, so ordering a session's
@@ -45,7 +45,7 @@ class Event:
 
 @dataclass(frozen=True)
 class SessionSummary:
-    """One session for a list: its first user message stands in as a title."""
+    """One session for a list: its title, or its first user message while it has none."""
 
     session_id: str
     created_at: str
@@ -177,7 +177,7 @@ class EventLog:
         return row[0] if row else None
 
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
-        """The most recently active sessions first, each titled by its first user message."""
+        """The most recently active sessions first, with their titles (see SessionSummary)."""
         return self._summaries("", (limit,))
 
     def session_summary(self, session_id: str) -> SessionSummary:
@@ -187,10 +187,22 @@ class EventLog:
             raise UnknownSession(session_id)
         return found[0]
 
+    def set_title(self, session_id: str, title: str, *, only_if_unset: bool = False) -> bool:
+        """Set the session's title. With only_if_unset, a title already set (a name the user
+        chose) is kept. Returns whether the title changed. Raises UnknownSession."""
+        sql = "UPDATE sessions SET title = ? WHERE session_id = ?"
+        if only_if_unset:
+            sql += " AND title IS NULL"
+        if self._conn.execute(sql, (title, session_id)).rowcount:
+            return True
+        if not self.has_session(session_id):
+            raise UnknownSession(session_id)
+        return False
+
     def _summaries(self, where: str, params: tuple[Any, ...]) -> list[SessionSummary]:
         rows = self._conn.execute(
             f"""
-            SELECT s.session_id, s.created_at, COALESCE(MAX(e.ts), s.created_at) AS updated_at,
+            SELECT s.session_id, s.created_at, COALESCE(MAX(e.ts), s.created_at) AS updated_at, s.title,
                    (SELECT payload FROM events
                      WHERE session_id = s.session_id AND type = 'user_message'
                      ORDER BY seq LIMIT 1) AS first_message
@@ -203,8 +215,8 @@ class EventLog:
             params,
         ).fetchall()
         return [
-            SessionSummary(sid, created, updated, json.loads(first)["text"] if first else "")
-            for sid, created, updated, first in rows
+            SessionSummary(sid, created, updated, title or (json.loads(first)["text"] if first else ""))
+            for sid, created, updated, title, first in rows
         ]
 
     def close(self) -> None:
