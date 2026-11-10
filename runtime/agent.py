@@ -1,5 +1,9 @@
 """What the agent is made of: its model, its tools, and the options every session gets.
 
+`topic_model` is the same model set up for short side requests (naming a conversation from its
+first question, runtime/topics.py); without one, conversations are listed under their first
+question.
+
     agent = build_agent("ollama")            the model and tools, from the provider's defaults
     await agent.check()                      fail early if a local model isn't ready
     session = Session.create(log, agent.model, agent.tools, **agent.session_options())
@@ -25,7 +29,7 @@ from runtime.federal_register_tools import federal_register_tools
 from runtime.model import ModelClient
 from runtime.permtracker_tools import permtracker_tools
 from runtime.prompts import system_prompt
-from runtime.providers import DEFAULT_MODELS, LOCAL_PROVIDERS, make_model
+from runtime.providers import DEFAULT_MODELS, LOCAL_PROVIDERS, make_model, make_topic_model
 from runtime.regulation_tools import regulation_tools
 from runtime.tools import Tool, ToolRegistry
 from runtime.web_tools import web_tools
@@ -37,6 +41,7 @@ class Agent:
     model_name: str
     model: ModelClient
     tools: ToolRegistry
+    topic_model: ModelClient | None = None
 
     async def check(self) -> None:
         """For a local model: raise ModelError with what to do if it isn't ready."""
@@ -62,6 +67,7 @@ def build_agent(provider: str, model: str | None = None, web: bool = True) -> Ag
         model_name=model or DEFAULT_MODELS[provider],
         model=make_model(provider, model),
         tools=ToolRegistry(agent_tools(web)),
+        topic_model=make_topic_model(provider, model),
     )
 
 

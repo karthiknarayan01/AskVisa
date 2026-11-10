@@ -16,6 +16,7 @@ Differences from the hosted providers, handled here:
   the same number is the window compaction works against (`context_window`).
 - Qwen 3.5 thinks before it answers (Ollama's `think`); the thinking streams as reasoning and
   is kept in the log, but isn't sent back, since Qwen doesn't expect earlier thinking.
+  `think=False` turns it off, for quick side requests such as naming a conversation.
 - Ollama unloads an idle model after 5 minutes, and with it the prompt it has already
   processed, so the next question pays for loading the model and reading the whole prompt
   again. Requests ask it to keep the model loaded (`keep_alive`, by default until Ollama
@@ -55,12 +56,14 @@ class OllamaModel:
         max_tokens: int = DEFAULT_MAX_TOKENS,
         context_window: int = DEFAULT_CONTEXT_WINDOW,
         keep_alive: float | str = KEEP_LOADED,
+        think: bool | None = None,
         client: Any = None,
     ):
         """`client` defaults to ollama.AsyncClient(), which honours OLLAMA_HOST. `keep_alive` is
         how long Ollama keeps the model loaded after a request ("30m", seconds, or negative for
-        until Ollama stops)."""
+        until Ollama stops). `think` is sent when given; otherwise the model's default applies."""
         self._model = model
+        self._think = think
         self._max_tokens = max_tokens
         self.context_window = context_window
         self._keep_alive = keep_alive
@@ -110,6 +113,7 @@ class OllamaModel:
                 stream=True,
                 keep_alive=self._keep_alive,
                 options=self._options(),
+                **({} if self._think is None else {"think": self._think}),
             )
             # aclosing: if the turn is stopped mid-reply, the connection is closed right away and
             # Ollama stops generating, rather than whenever the generator is collected.

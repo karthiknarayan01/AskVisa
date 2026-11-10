@@ -4,6 +4,7 @@
     make_model("deepseek")             DEEPSEEK_API_KEY, default model deepseek-v4-pro
     make_model("deepseek", "deepseek-flash")
     make_model("ollama")               local, no key, default model qwen3.5:9b
+    make_topic_model("ollama")         the same model for naming a conversation: short, no thinking
 
 The output token cap per request comes from AGENT_MAX_OUTPUT_TOKENS when set, otherwise
 DEFAULT_MAX_TOKENS. A `max_tokens` argument overrides both.
@@ -31,12 +32,14 @@ DEFAULT_MODELS = {
 }
 LOCAL_PROVIDERS = {"ollama"}
 MAX_TOKENS_ENV = "AGENT_MAX_OUTPUT_TOKENS"
+TOPIC_MAX_TOKENS = 1024  # room for a hosted model's reasoning before its few words of title
 
 
 def make_model(
-    provider: str, model: str | None = None, max_tokens: int | None = None
+    provider: str, model: str | None = None, max_tokens: int | None = None, *, think: bool | None = None
 ) -> ModelClient:
-    """The client for `provider`, with its default model unless `model` is given."""
+    """The client for `provider`, with its default model unless `model` is given. `think`
+    applies to a local model only (Ollama's thinking switch)."""
     cls = PROVIDERS.get(provider)
     if cls is None:
         raise ValueError(f"unknown provider {provider!r}; expected one of {sorted(PROVIDERS)}")
@@ -48,7 +51,16 @@ def make_model(
     if provider == "ollama":
         # A local model's window is what we ask Ollama to allocate, so it has to be explicit.
         options["context_window"] = context_window_from_env() or OLLAMA_DEFAULT_CONTEXT_WINDOW
+        if think is not None:
+            options["think"] = think
     return cls(**options)
+
+
+def make_topic_model(provider: str, model: str | None = None) -> ModelClient:
+    """The same model, set up for a short side request (naming a conversation): a small output
+    cap, and no thinking for a local model. A local model keeps the main client's context window,
+    since asking Ollama for a different one reloads the model."""
+    return make_model(provider, model, max_tokens=TOPIC_MAX_TOKENS, think=False)
 
 
 def max_tokens_from_env() -> int:
