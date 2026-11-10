@@ -1,74 +1,84 @@
-// One turn: the question, the steps the agent took (thinking, stamps, answer), and how it ended.
+// One turn: the question, one line for the steps the agent took (thinking and lookups), the
+// answer, and how it ended. The line says what the agent is doing while it works, and opens to
+// list each step.
 
 import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { activityLine, toolLine } from "../activity";
 import type { Step, Turn } from "../turns";
 import { ChevronIcon } from "./icons";
-import { Stamp, StampDetails } from "./Stamp";
 
 type Props = { turn: Turn; live: boolean; isLast: boolean; onRetry: () => void };
 
+const COMPACTION_NOTE = "Earlier messages were summarized to keep the conversation within the model's memory.";
+
 export function TurnView({ turn, live, isLast, onRetry }: Props) {
   if (turn.steps.length === 1 && turn.steps[0].kind === "compaction") {
-    return <p className="compaction-note">Earlier messages were summarized to keep the conversation within the model's memory.</p>;
+    return <p className="compaction-note">{COMPACTION_NOTE}</p>;
   }
-  const lastStep = turn.steps[turn.steps.length - 1];
-  const waiting = live && !turn.end && (!lastStep || lastStep.kind === "tools");
+  const working = live && !turn.end;
+  const activity = activityLine(turn.steps, working);
+  const steps = turn.steps.filter((s) => s.kind === "thinking" || s.kind === "tools");
+  const last = turn.steps[turn.steps.length - 1];
   return (
-    <article className="turn" aria-busy={live && !turn.end}>
+    <article className="turn" aria-busy={working}>
       <h2 className="question">{turn.question}</h2>
-      {turn.steps.map((step, i) => (
-        <StepView key={i} step={step} active={live && !turn.end && i === turn.steps.length - 1} />
-      ))}
-      {waiting && <p className="working" role="status">Working on it</p>}
+      {activity && <ActivityLine text={activity.text} active={activity.active} steps={steps} />}
+      {turn.steps.map((step, i) =>
+        step.kind === "answer" ? (
+          <Answer key={i} text={step.text} streaming={working && step === last} />
+        ) : step.kind === "compaction" ? (
+          <p key={i} className="compaction-note">{COMPACTION_NOTE}</p>
+        ) : null,
+      )}
       {turn.end && <EndNote turn={turn} canRetry={isLast && !live} onRetry={onRetry} />}
     </article>
   );
 }
 
-function StepView({ step, active }: { step: Step; active: boolean }) {
-  if (step.kind === "thinking") return <Thinking text={step.text} active={active} />;
-  if (step.kind === "answer") {
-    return (
-      <div className={`answer${active ? " answer--streaming" : ""}`}>
-        <Markdown remarkPlugins={[remarkGfm]} components={{ a: (props) => <a {...props} target="_blank" rel="noreferrer" /> }}>
-          {step.text}
-        </Markdown>
-      </div>
-    );
-  }
-  if (step.kind === "tools") return <Stamps tools={step.tools} />;
-  return <p className="compaction-note">Earlier messages were summarized to keep the conversation within the model's memory.</p>;
-}
-
-function Stamps({ tools }: { tools: Extract<Step, { kind: "tools" }>["tools"] }) {
-  const [open, setOpen] = useState<string | null>(null);
+function ActivityLine({ text, active, steps }: { text: string; active: boolean; steps: Step[] }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="stamps">
-      <div className="stamps__row">
-        {tools.map((tool) => (
-          <div className="stamps__item" key={tool.id}>
-            <Stamp tool={tool} open={open === tool.id} onToggle={() => setOpen(open === tool.id ? null : tool.id)} />
-            {tool.summary && <p className="stamps__summary">{tool.summary}</p>}
-          </div>
-        ))}
-      </div>
-      <StampDetails tool={tools.find((t) => t.id === open)} />
+    <div className="activity">
+      <button
+        type="button"
+        className={`activity__toggle${active ? " activity__toggle--active" : ""}`}
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        disabled={steps.length === 0}
+      >
+        <span role={active ? "status" : undefined} className="activity__text">{text}</span>
+        {steps.length > 0 && (
+          <span className={`activity__chevron${open ? " activity__chevron--open" : ""}`}><ChevronIcon /></span>
+        )}
+      </button>
+      {open && (
+        <ol className="activity__steps">
+          {steps.map((step, i) =>
+            step.kind === "thinking" ? (
+              <li key={i} className="activity__thinking">{step.text.trim()}</li>
+            ) : step.kind === "tools" ? (
+              step.tools.map((tool) => (
+                <li key={tool.id} className={`activity__tool activity__tool--${tool.status}`}>
+                  {toolLine(tool)}
+                  {tool.summary && <span className="activity__summary">{tool.summary}</span>}
+                </li>
+              ))
+            ) : null,
+          )}
+        </ol>
+      )}
     </div>
   );
 }
 
-function Thinking({ text, active }: { text: string; active: boolean }) {
-  const [open, setOpen] = useState(false);
-  const preview = text.trim().split("\n").filter(Boolean).pop() ?? "";
+function Answer({ text, streaming }: { text: string; streaming: boolean }) {
   return (
-    <div className={`thinking${active ? " thinking--active" : ""}`}>
-      <button type="button" className="thinking__toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className={`thinking__chevron${open ? " thinking__chevron--open" : ""}`}><ChevronIcon /></span>
-        <span className="thinking__label">{active ? "Thinking" : "Thought it through"}</span>
-      </button>
-      {open ? <p className="thinking__text">{text}</p> : active && <p className="thinking__preview">{preview}</p>}
+    <div className={`answer${streaming ? " answer--streaming" : ""}`}>
+      <Markdown remarkPlugins={[remarkGfm]} components={{ a: (props) => <a {...props} target="_blank" rel="noreferrer" /> }}>
+        {text}
+      </Markdown>
     </div>
   );
 }

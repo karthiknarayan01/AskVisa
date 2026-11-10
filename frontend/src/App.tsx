@@ -6,7 +6,6 @@ import { EmptyState } from "./components/EmptyState";
 import { MenuIcon } from "./components/icons";
 import { Sidebar } from "./components/Sidebar";
 import { SidebarResizer, useSidebarWidth } from "./components/SidebarResizer";
-import { InkFilter } from "./components/Stamp";
 import { TurnView } from "./components/TurnView";
 import { useChat } from "./useChat";
 
@@ -51,7 +50,6 @@ export default function App() {
 
   return (
     <div className="app" style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
-      <InkFilter />
       <Sidebar
         sessions={chat.sessions}
         current={chat.sessionId}
