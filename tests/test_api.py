@@ -70,6 +70,18 @@ async def test_the_web_app_is_served_with_a_fallback_to_index(log, tmp_path):
         assert (await http.get("/api/health")).json() == {"status": "ok"}
 
 
+async def test_the_page_is_always_revalidated_and_hashed_assets_are_cached_for_good(log, tmp_path):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>app</html>")
+    (dist / "assets" / "index-abc123.js").write_text("x")
+    (dist / "favicon.svg").write_text("<svg/>")
+    async with client(create_app(make_agent([]), log, static_dir=dist)) as http:
+        for path in ("/", "/c/some-session", "/index.html", "/favicon.svg"):
+            assert (await http.get(path)).headers["cache-control"] == "no-cache", path
+        assert "immutable" in (await http.get("/assets/index-abc123.js")).headers["cache-control"]
+
+
 async def test_without_a_built_app_only_the_api_is_served(log, tmp_path):
     async with client(create_app(make_agent([]), log, static_dir=tmp_path / "missing")) as http:
         assert (await http.get("/")).status_code == 404
