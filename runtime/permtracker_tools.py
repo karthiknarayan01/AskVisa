@@ -10,7 +10,7 @@ Always available (no API key):
 
 Only when PERMTRACKER_API_KEY is set, so the model never sees a tool that can only fail:
     perm_case_status(case_number, live?) GET /cases/{caseNumber}
-    perm_decision_estimate(filed_date)   GET /estimate
+    perm_decision_estimate(case_number? | filed_date?)  GET /estimate
     perm_queue()                         GET /queue
     visa_bulletin(month?)                GET /visa-bulletin
     search_employers(query)              GET /employers
@@ -24,16 +24,19 @@ Only when PERMTRACKER_API_KEY is set, so the model never sees a tool that can on
 Always available too: immigration_data_page(topic), which reads one of the site's statistics
 pages (daily PERM decisions, denial rates, USCIS processing times, H-1B lottery odds, visa
 interview waits, ...) for data the API doesn't serve. It returns the page's text, read with the
-same reader as read_web_page, so a page redesign can change what it gets.
+same reader as read_web_page, so a page redesign can change what it gets. The API has no list of
+the cases decided on a day: the daily page shows that day's totals and only a sample of its
+cases, and its description says so, so the model doesn't present the sample as the whole day.
 
 Not tools: /me (the key's own usage), and /webhooks and /watches (they deliver events to an
 https endpoint the user runs). The key is sent as a Bearer token; free keys allow 10 calls a
 minute and 300 a day, the lookups 60 a minute.
 
 Answers come back as {"data": ..., "meta": {"source", "asOf", "url"}}. A tool returns a first
-line with the date of the data, then the data as JSON. match_employer adds a line between them
-saying whether the match is exact, possible or none and what to do about it, so that guidance is
-in front of the model when it reads the numbers.
+line with the date of the data and the credit the API terms require wherever results are shown,
+then the data as JSON. match_employer adds a line between them saying whether the match is
+exact, possible or none and what to do about it, so that guidance is in front of the model when
+it reads the numbers.
 
 The descriptions say when to use each tool and when not to; the system prompt only says what
 the group is for. All tools only read, so they need no approval and are safe to re-run.
@@ -58,6 +61,10 @@ API_KEY_ENV = "PERMTRACKER_API_KEY"
 EXPORT_KINDS = ["cases", "employers", "law-firms", "occupations"]
 TIMEOUT_SECONDS = 20
 MAX_OUTPUT_CHARS = 20_000
+CREDIT = 'end the answer with "Data: PERM Tracker (https://permtracker.app)"'
+TRUNCATED_HEADER = "X-Export-Truncated"
+TRUNCATED = "truncated"
+TRUNCATED_NOTE = "Cut short: more rows matched than one export returns. Say so, or narrow the filters."
 
 
 MATCH_NOTES = {
@@ -81,6 +88,7 @@ Use it for questions about one employer, for example:
 - "Does Acme sponsor green cards?" or "Will this company sponsor my H-1B?"
 - "How many PERM cases has Google filed, and how many were certified or denied?"
 - "Is this employer still filing PERM cases?" (look at the newest filing and filings in the last 12 months)
+- "How many of Microsoft's PERM cases are pending right now?"
 - comparing job offers by how often each employer sponsors
 
 Don't use it for:
@@ -90,12 +98,18 @@ Don't use it for:
 How to use it:
 - Pass the employer's name as the user gave it.
 - The result says whether the match is exact, possible or none, and what to do for each.
+- Decisions and the certified share come from DOL's published files, which reach only to the end \
+of DOL's latest quarterly release (months behind); pending cases and the newest filing are current.
+- The certified share is left out when the employer has too few decisions for it to mean much.
 - The numbers are the employer's history, not a prediction for the user's own case.
 
 Returns:
-- the match, and for a match: PERM decisions, certified share, pending cases, newest filing, \
-filings in the last 12 months, and H-1B LCA and wage request counts
-- a first line with the date of the data: mention it when how current the numbers are matters"""
+- the match (exact, possible or none) and the employer's name and slug
+- PERM: published decisions, certified, denied, certified share, cases pending at DOL now, the \
+newest filing date, and filings in the last 12 months
+- H-1B LCA and prevailing wage request counts
+- a first line with the date of the data (of DOL's latest published release): mention it when how \
+current the numbers are matters"""
 
 FIND_SOC_CODE = """\
 Looks up SOC occupation codes. A SOC code is the government's code for an occupation (e.g. \
@@ -111,91 +125,122 @@ Use it for questions about an occupation rather than an employer, for example:
 
 How to use it:
 - Pass a job title or a SOC code.
-- A title can map to several codes: give the common ones, and say the right code depends on the \
-actual job duties, not the title.
-- Approval rates and wages are history, not a prediction for the user's case.
+- A title can map to several codes: give the common ones with their shares, and say the right code \
+depends on the actual job duties, not the title.
+- Approval rates and wages are history, not a prediction for the user's case; they are left out \
+for codes with too few cases.
 
 Returns:
-- for a title: the codes employers filed it under, with how often each was used
-- for a code: its title, O*NET description and tasks, common filed titles, PERM approval rate and \
-median offered wage, and for a 2010 code the 2018 codes it became
+- for a title: the codes employers filed it under in DOL's PERM, prevailing wage and LCA files, \
+with each code's share of the title's filings
+- for a code: its title, O*NET description and core tasks, the titles most filed under it, its \
+PERM approval rate and median offered wage, and for a 2010 code the 2018 codes it became
 - a first line with the date of the data: mention it when how current the numbers are matters"""
 
 PERM_CASE_STATUS = """\
-Looks up one Department of Labor case by its case number.
+Looks up one Department of Labor case by its case number: its current status, and once decided, \
+DOL's record of the decision.
 
 Use it when the user gives a DOL case number, for example:
-- "What's the status of G-100-26045-123456?" (PERM cases start with G-100)
+- "What's the status of G-100-26045-123456?" (PERM cases start with G-100 or G-200)
 - "Was my prevailing wage request P-100-… issued?" (wage requests start with P-100)
 - "Is LCA I-200-… certified?" (H-1B LCAs start with I-200)
-- H-2A, H-2B and CW-1 cases
+- H-2A, H-2B and CW-1 cases: H-300 (H-2A application), JO-A-300 (H-2A job order), H-400 (H-2B \
+application), P-400 (H-2B wage request), C-500 (CW-1 application), P-500 (CW-1 wage request)
+- getting a case's filing date, to pass to perm_decision_estimate or to compare with the queue
 
 Don't use it for:
 - USCIS receipt numbers (three letters then ten digits, like IOE0912345678 or EAC2190012345): \
 those are not DOL cases and this tool can't look them up
+- finding cases by employer, date or outcome (use export_search, or the daily page for one day)
 
 How to use it:
 - If the user wants a case's status but hasn't given the number, ask for it.
-- Set live to true only when a recent case number isn't found, to ask DOL directly (limited to \
-200 a day).
+- Set live to true only when the number isn't found and the case is recent: it asks DOL directly \
+(a limited daily allowance). A case already on record answers without it.
+- A case that is still pending, or decided after DOL's latest quarterly release, carries only \
+DOL's five live fields: number, employer, job title, filing date and status. Wage, law firm, \
+worksite and occupation appear only once the case is in a published release.
+- Statuses: Analyst Review is the ordinary queue, worked in filing order; Application On Hold, \
+RFI Issued, NORD Issued, Pending Audit Response and Supervised Recruitment are outside that order; \
+Certified, Denied and Withdrawn are final; Reconsideration Appeals follows a denial.
 
 Returns:
-- the status, filing date and employer
-- once decided, DOL's record of the decision: outcome, dates, job, wage and worksite"""
+- the case number, program, status, filing date, employer and job title
+- once published: the decision and its date, the job, SOC code, offered wage, worksite and law firm
+- for a seasonal case: its workers, work period and worksite"""
 
 PERM_DECISION_ESTIMATE = """\
-Estimates when the Department of Labor will decide a pending PERM case, from its filing date.
+Estimates when the Department of Labor will decide a pending PERM case, from its case number or its \
+filing date.
 
 Use it for questions like:
 - "When will my PERM be approved?"
 - "My PERM was filed in February 2026; how much longer?"
+- "My case number is G-100-26045-123456; when should I expect a decision?"
 
 Don't use it for:
 - a case that is already decided (use perm_case_status)
+- the queue in general, with no case or date (use perm_queue)
 
 How to use it:
-- It needs the filing date. If the user gave a case number instead, call perm_case_status first \
-to get it; if they gave neither, ask.
-- Say it is an estimate based on how DOL has been processing cases, not a DOL prediction.
-- Give the range, not just one date.
+- Pass case_number when the user gave one (its own status and filing date are used), otherwise \
+filed_date. If they gave neither, ask.
+- The estimate assumes the case is in analyst review, the ordinary queue. A case on hold, at an \
+RFI, audit or NORD, or in supervised recruitment takes longer: say so.
+- Say it is an estimate from how DOL has been processing cases, not a DOL prediction or a promise.
+- Give the range, not just the likely date, and pass on the caveats.
 
 Returns:
-- a likely decision date, a range and caveats"""
+- a likely decision date, a range, how it was worked out, and caveats"""
 
 PERM_QUEUE = """\
-The Department of Labor's current PERM processing times, and how many PERM cases are pending for \
+The Department of Labor's current processing times, and how many PERM cases are still pending for \
 each filing month.
 
 Use it for questions like:
 - "How long is PERM taking right now?"
 - "Which filing month is DOL working on?"
 - "How big is the PERM backlog?"
+- "How long are prevailing wage requests taking?"
 - putting the user's own filing date in context: how many cases filed before theirs are still waiting
 
 Don't use it for:
 - one case's estimated decision date (use perm_decision_estimate)
+- how many cases were decided or filed on a given day (use immigration_data_page: \
+perm_daily_decisions or perm_filings_by_day)
+
+How to use it:
+- A queue's average days and the filing month it is working on are different measures: say which \
+one you give.
+- Analyst review is worked in filing order; other queues (audits, reconsiderations) are not, so \
+their months and times differ.
 
 Returns:
-- current processing times, and pending cases by filing month"""
+- for each of DOL's queues: the filing month it is working on and the average days to a decision
+- pending PERM cases by filing month"""
 
 VISA_BULLETIN = """\
-A month's State Department visa bulletin: the priority date cutoffs for green cards.
+A month's State Department visa bulletin: the priority date cutoffs for green cards, as printed.
 
 Use it for questions like:
 - "Is my priority date current?"
 - "What's the EB-2 India cutoff this month?"
-- "How far did EB-3 move since last month?"
+- "How far did EB-3 move since last month?" or "What was the EB-2 China date in October 2024?"
 
 How to use it:
-- Pass month as YYYY-MM, or leave it out for the newest bulletin.
+- Pass month as YYYY-MM (bulletins go back to 2005-06), or leave it out for the newest bulletin. \
+The newest can be next month's: a bulletin comes out during the month before it applies.
 - To compare movement, call it for both months.
 - A priority date is current when it is earlier than the cutoff for the user's category and \
-country; "C" means current for everyone.
-- Which chart applies to filing an I-485 is set by USCIS each month: say so rather than assuming.
+country of birth (chargeability); "C" means current for everyone and "U" means unavailable.
+- Final action dates decide when a green card can be approved; dates for filing decide when an \
+I-485 can be filed, but only in months USCIS says to use that chart: say so rather than assuming.
 
 Returns:
-- cutoff dates for the employment-based (EB-1 to EB-5) and family-based categories
-- by country of birth: all chargeability, China, India, Mexico, Philippines
+- the bulletin's month, and cutoff dates for employment-based (EB-1 to EB-5, including EB-3 other \
+workers) and family-based categories
+- by country of birth: all chargeability areas, China, India, Mexico, Philippines
 - both charts: final action dates and dates for filing"""
 
 SEARCH_EMPLOYERS = """\
@@ -204,27 +249,32 @@ Searches employers that have filed PERM cases, by name.
 Use it for:
 - seeing the candidates when match_employer found no exact match
 - browsing an employer's entities, e.g. "which Acme companies file PERM?"
+- getting the slug employer_profile needs
 
 Don't use it for:
 - a quick yes or no on one employer's sponsorship (match_employer is enough)
 
 Returns:
-- matching employers, each with the slug to pass to employer_profile"""
+- matching employers, each with its PERM record (cases, certified, denied) and the slug to pass to \
+employer_profile"""
 
 EMPLOYER_PROFILE = """\
 One employer's full PERM record.
 
 Use it for deeper questions about one employer, for example:
 - "How long do Google's PERM cases take?"
-- "What has Acme filed recently?"
-- "How many of their cases are pending, and at what stage?"
+- "How many PERM cases did Acme file in the last year?"
+- "How many of their cases are pending, and at what stage?" (e.g. on hold, at an RFI)
 
 How to use it:
 - Get the slug from search_employers first.
+- Decisions and median days come from DOL's published files (months behind); pending cases by stage \
+are from DOL's case status now.
 - The numbers are the employer's history, not a prediction for the user's case.
 
 Returns:
-- cases and outcomes, median days from filing to a decision, recent filings, and pending cases by stage"""
+- cases, certified and denied, median days from filing to a decision, filings in the last 12 \
+months, and how many of its cases are pending at DOL now, by stage"""
 
 SEARCH_LAW_FIRMS = """\
 Searches immigration law firms that file PERM cases, by name.
@@ -246,7 +296,8 @@ How to use it:
 the user's case: never rank or recommend firms from them.
 
 Returns:
-- cases and outcomes, and pending cases by stage"""
+- cases and outcomes from DOL's published files, and how many of its cases are pending at DOL now, \
+by stage"""
 
 SEARCH_OCCUPATIONS = """\
 Searches occupations that PERM cases were filed under, by title.
@@ -275,59 +326,79 @@ Returns:
 - the SOC code, case outcomes and the median offered wage"""
 
 EXPORT_SEARCH = """\
-Returns all the results of a search, past the first page, as JSON.
+Returns all the results of a case, employer, law firm or occupation search, past the first page, \
+as JSON (up to 1,000 rows).
 
 Use it only when a question needs the complete list, for example:
 - "Every PERM case Acme filed in California in 2026"
-- "All certified cases for software developers filed last March"
+- "All denied PERM cases for software developers filed in March 2025"
 
 Don't use it for:
-- one employer, firm or occupation (the search and profile tools are cheaper)
+- one employer, firm or occupation's totals (the search and profile tools are cheaper)
+- one case (use perm_case_status)
+- what DOL decided on a given day (use immigration_data_page with perm_daily_decisions)
 
 How to use it:
-- kind is cases, employers, law-firms or occupations; query searches by name.
-- For cases you can also filter by law firm, worksite state, occupation, filing date range and outcome.
-- Long results are clipped: narrow the filters rather than asking for everything.
+- kind is cases, employers, law-firms or occupations; query searches by name (for cases, the \
+employer's name).
+- For cases, give at least one of query, firm, state or occupation; then narrow with from_date and \
+to_date (the filing date, not the decision date) and outcome (certified, denied or withdrawn).
+- Law firm, worksite state, occupation and wage exist only on cases in DOL's published files, \
+which reach only to DOL's latest quarterly release: filtering by firm, state or occupation leaves \
+out pending cases and recent decisions.
+- If more than 1,000 rows match, the result says it was cut short: narrow the filters rather than \
+asking for everything. Long answers are clipped too.
 
 Returns:
-- every matching record"""
+- every matching record, up to 1,000"""
 
 # topic -> (path, what the page shows). Only pages with data; the site's calculators run in the
 # browser, so their pages have no answers to read.
 PAGES: dict[str, tuple[str, str]] = {
-    "today": ("/today", "where every step of the green card process stands right now, on one page"),
-    "perm_daily_decisions": ("/perm-decision-activity", "how many PERM cases DOL decided each day, certified and denied"),
-    "perm_filings_by_day": ("/filings-by-day", "how many PERM cases were filed each day"),
-    "perm_processing_times": ("/perm-processing-times", "DOL's PERM processing times and their trend"),
-    "perm_denial_rates": ("/perm-denial-risk", "PERM denial rates and what drives them"),
-    "perm_rfi_audits": ("/perm-rfi-audit", "how often PERM cases get a request for information or an audit"),
-    "perm_layoff_disclosures": ("/perm-layoff-disclosures", "layoffs employers reported on PERM filings"),
-    "perm_case_statuses": ("/perm-case-statuses", "what each PERM case status means"),
-    "prevailing_wage_requests": ("/pwd-cases", "prevailing wage request (PWD) processing and recent determinations"),
-    "uscis_processing_times": ("/uscis-processing-times", "USCIS processing times by form, e.g. I-140, I-485, I-765"),
-    "uscis_rfe_rates": ("/uscis-rfe-rates", "how often USCIS issues requests for evidence, by form"),
-    "i140_awaiting_visa": ("/i140-awaiting-visa", "approved I-140s waiting for a visa number, by category and country"),
-    "i485_by_field_office": ("/i485-by-field-office", "pending I-485 cases and processing by USCIS field office"),
-    "nvc_waiting_list": ("/nvc-waiting-list", "the National Visa Center waiting list for immigrant visas"),
-    "visa_issuances": ("/visa-issuances", "immigrant and nonimmigrant visas issued, by category and country"),
-    "green_card_timelines": ("/green-card-timelines", "green card timelines reported by applicants, step by step"),
-    "perm_by_state": ("/perm-by-state", "PERM filings and outcomes by worksite state"),
-    "perm_by_city": ("/perm-cities", "PERM filings and outcomes by city"),
-    "perm_by_industry": ("/perm-industries", "PERM filings and outcomes by industry"),
-    "perm_by_country": ("/perm-countries", "PERM filings and outcomes by the worker's country of citizenship"),
-    "perm_wages": ("/perm-wages", "wages offered in PERM cases, by job"),
-    "h1b_wages": ("/lca-wages", "H-1B salaries from LCAs, by job and employer"),
-    "h1b_employers": ("/h1b-employers", "the employers filing the most H-1B LCAs"),
-    "h1b_cap_exempt_employers": ("/h1b-cap-exempt-employers", "H-1B cap-exempt employers (universities, nonprofits, research)"),
-    "h1b_lottery_odds": ("/h1b-lottery-odds", "H-1B lottery registrations, selections and the odds of being picked"),
-    "opt_employers": ("/opt-employers", "employers of students on OPT and CPT"),
-    "visa_wait_times": ("/visa-wait-times", "visa interview appointment waits at US consulates"),
-    "visa_refusals": ("/visa-refusals", "why visas are refused, and refusal rates"),
-    "layoff_notices": ("/layoffs", "layoff notices (WARN) from sponsoring employers"),
-    "debarments": ("/debarments", "employers debarred from sponsoring"),
-    "wage_violations": ("/wage-violations", "employers found in violation of visa wage rules"),
-    "employers_under_review": ("/perm-employers/under-review", "employers whose PERM cases are under extra DOL review"),
-    "law_firm_rankings": ("/law-firm-rankings", "law firms ranked by PERM filings"),
+    "today": ("/today", "one-page snapshot: the filing date of DOL's typical decision today for wage requests and PERM, filings vs decisions over 30 days, USCIS's I-140 median, and the newest visa bulletin's EB-2 movement"),
+    "perm_daily_decisions": ("/perm-decision-activity", "PERM decisions per day for the last 30 days (decided, certified, denied, withdrawn), the latest working day vs a typical one, and the cases DOL moved on the newest day: the day's counts by status change and program, then a SAMPLE of the first 60 rows (case number, program, employer, job title, filing date, status from and to), not every case; the rows mix PERM and wage requests and can't be filtered here"),
+    "perm_filings_by_day": ("/filings-by-day", "how many PERM cases, wage requests, H-1B LCAs and H-2 cases were filed today so far, yesterday, in the last 7 and 30 days, and PERM filings for each of the last 30 days"),
+    "perm_processing_times": ("/perm-processing-times", "the filing month DOL's PERM analyst review is deciding now, DOL's average days to a decision (last 30, 90 and 180 days), the prevailing wage request being decided, and the median days from filing to decision for each month since Oct 2023"),
+    "perm_backlog": ("/perm-queue", "the PERM backlog: cases still waiting at DOL, the filing month being worked and how much of it is decided, filing months cleared per month, and the waiting cases by stage (analyst review, on hold, RFI, NORD, audit, appeals)"),
+    "perm_by_filing_month": ("/perm-by-the-numbers", "for each filing month, how many PERM cases are decided and how many are still waiting at DOL, and the waiting cases by stage"),
+    "perm_decided_cases": ("/perm-cases", "PERM decisions counted by month from DOL's published files, with totals by outcome (certified, denied, withdrawn) and by fiscal year of decision"),
+    "perm_denial_rates": ("/perm-denial-risk", "PERM denial rates by factor: wage band, job not full time, occupation, worksite state and fiscal year, against the overall rate"),
+    "perm_rfi_audits": ("/perm-rfi-audit", "open RFIs (requests for information) and how far into the wait they arrive, the pending PERM cases at each stage (analyst review, on hold, RFI, NORD, supervised recruitment) with the employers holding many, and audit counts"),
+    "perm_layoff_disclosures": ("/perm-layoff-disclosures", "how many PERM applications said the employer had layoffs in the occupation, by employer and fiscal year, and how often those were certified"),
+    "perm_case_statuses": ("/perm-case-statuses", "what each DOL case status means (analyst review, on hold, RFI issued, NORD issued, audit, supervised recruitment, certified, denied, withdrawn, appeals), who acts next, and how many pending cases are in each today"),
+    "perm_recruitment": ("/perm-recruitment", "when employers run PERM recruitment before filing: median days from each step (job order, Sunday ads, last step) to filing, and how often each kind of ad is used"),
+    "prevailing_wage_requests": ("/pwd-cases", "prevailing wage requests: whether DOL is keeping up (requests decided vs filed each week), and the median days from filing to determination by month"),
+    "uscis_processing_times": ("/uscis-processing-times", "USCIS median processing months by form (I-129, I-140, employment-based I-485, I-765, I-131) for the latest quarter, with pending and decided counts"),
+    "uscis_rfe_rates": ("/uscis-rfe-rates", "how often USCIS issued a request for evidence on H-1B (and other) petitions, by month and fiscal year, and how often those were approved"),
+    "i140_awaiting_visa": ("/i140-awaiting-visa", "approved I-140 petitions waiting for a visa number, by category (EB-1, EB-2, EB-3, EB-3 other workers) and country of birth"),
+    "i485_by_field_office": ("/i485-by-field-office", "employment-based I-485s pending, approved and denied at each USCIS field office for the latest quarter"),
+    "nvc_waiting_list": ("/nvc-waiting-list", "the State Department's waiting list of immigrant visa applicants at consulates (not I-485s), by category and country, and the current pause on consular interviews"),
+    "consular_posts": ("/consular-posts", "the status of immigrant visa interviews at US consulates, including the worldwide postponement since late August 2026"),
+    "visa_issuances": ("/visa-issuances", "employment immigrant visas issued abroad each month by category (EB-1 to EB-5), and the effect of the 75-country pause"),
+    "green_card_timelines": ("/green-card-timelines", "green card timelines reported by applicants, step by step (only medians once 5 reports exist)"),
+    "visa_bulletin_history": ("/visa-bulletin", "the newest visa bulletin with its movement, which chart USCIS accepts for I-485 filing this month, and how each category moved in the same month of earlier years"),
+    "perm_by_state": ("/perm-by-state", "PERM filings, approval and denial rates, median days and median wage by worksite state"),
+    "perm_by_city": ("/perm-cities", "PERM decisions, approval rate, median wage and denials by worksite city"),
+    "perm_by_industry": ("/perm-industries", "PERM decisions, approval rate, median wage and denials by industry (NAICS)"),
+    "perm_by_country": ("/perm-countries", "PERM decisions, approval rate, median wage and denials by the worker's country of citizenship (only cases on DOL's old form, decided through FY2024)"),
+    "perm_wages": ("/perm-wages", "wages offered in certified PERM cases: the overall spread and each busy occupation's median and range"),
+    "perm_top_sponsors": ("/perm-employers", "the employers with the most PERM filings, and the ones with the most cases waiting at DOL right now"),
+    "lca_cases": ("/lca-cases", "H-1B LCAs by filing month, decided and still waiting at DOL"),
+    "h1b_wages": ("/lca-wages", "offered H-1B wages from LCAs, by occupation, worksite state, fiscal year and outcome"),
+    "lca_wage_sources": ("/lca-wage-sources", "where H-1B LCAs took their prevailing wage from (DOL's OES data, private surveys, union contracts), by fiscal year"),
+    "h1b_employers": ("/h1b-employers", "the employers with the most H-1B LCAs certified, or USCIS approvals, by fiscal year and state"),
+    "h1b_cap_exempt_employers": ("/h1b-cap-exempt-employers", "H-1B cap-exempt employers (universities, affiliated nonprofits, research organizations) and when they file"),
+    "h1b_lottery_odds": ("/h1b-lottery-odds", "H-1B lottery registrations, selections and the selection rate by fiscal year, and how the wage-weighted lottery from FY2027 changes the odds by wage level"),
+    "opt_employers": ("/opt-employers", "the employers of the most students on OPT and STEM OPT, by year"),
+    "seasonal_cases": ("/seasonal-cases", "H-2A, H-2B and CW-1 applications, job orders and wage requests: how many were filed and how many are still in process"),
+    "visa_wait_times": ("/visa-wait-times", "the wait for a visa interview appointment at each US consulate (work visas and others)"),
+    "visa_refusals": ("/visa-refusals", "visa refusals by ground (public charge, 214(b) and others), by year"),
+    "layoff_notices": ("/layoffs", "WARN layoff notices from employers that sponsor PERM, by state and employer, with employees affected"),
+    "debarments": ("/debarments", "employers, attorneys and agents DOL has barred from filing, the violation, and whether the bar is in force today"),
+    "wage_violations": ("/wage-violations", "Wage and Hour Division findings against H-1B, H-2A and H-2B employers: cases, back wages and workers owed"),
+    "employers_under_review": ("/perm-employers/under-review", "employers with PERM cases on hold, at an RFI or deficiency notice, in supervised recruitment or under appeal, with how many and since when"),
+    "law_firm_rankings": ("/law-firm-rankings", "law firms ranked by PERM decisions in the latest fiscal year, with employers served and certified share"),
+    "bright_outlook_jobs": ("/bright-outlook-jobs", "O*NET Bright Outlook occupations (fast-growing or many openings) and how often employers sponsor them in PERM and H-1B"),
     "policy_changes": ("/policy-changes", "a summary list of recent policy changes; for a rule's text and dates, use search_federal_register first"),
 }
 
@@ -340,6 +411,9 @@ Pages, by topic:
 
 Use it when one of these pages answers the question and no other tool does, for example:
 - "How many PERM cases were approved yesterday?" (perm_daily_decisions)
+- "Was any PERM case filed in February 2026 certified today?" (perm_daily_decisions: look at the \
+filing dates in its sample of the day's cases)
+- "How many PERM cases were filed this week?" (perm_filings_by_day)
 - "What are the odds in the H-1B lottery?" (h1b_lottery_odds)
 - "How long is USCIS taking on I-485s?" (uscis_processing_times)
 - "How long is the visa interview wait in Mumbai?" (visa_wait_times)
@@ -350,11 +424,16 @@ exact records, while this returns the text of a web page
 
 How to use it:
 - Use it before searching the web.
-- Read the numbers carefully, and say what date the page gives for its data.
+- Read the numbers carefully, and say what date the page gives for its data. Many figures come \
+from DOL's or USCIS's published files, which run months behind; say so when it matters.
+- A page that lists records may show only some of them (perm_daily_decisions shows 60 of the \
+day's cases): answer from the totals, and when you use the listed rows, say they are a sample. \
+Finding no match in a sample doesn't mean there was none.
 - If the page doesn't hold the answer, say so or try web_search.
 
 Returns:
-- the page's text, with tables as text, up to 20,000 characters"""
+- a line saying what the page shows and the credit to give, then the page's text, with tables as \
+text, up to 20,000 characters"""
 
 
 def permtracker_tools(
@@ -406,7 +485,7 @@ async def data_page(read_page: Callable[[str], str], topic: str) -> str:
     """
     path, about = PAGES[topic]
     text = await asyncio.to_thread(read_page, SITE_URL + path)
-    return f"Page: {about}\n\n{text}"
+    return f"Page: {about}\nWhen you use it, {CREDIT}.\n\n{text}"
 
 
 def keyed_tools(client: PermTrackerClient) -> list[Tool]:
@@ -432,9 +511,12 @@ def keyed_tools(client: PermTrackerClient) -> list[Tool]:
         _tool(
             "perm_decision_estimate",
             PERM_DECISION_ESTIMATE,
-            {"filed_date": _string("The PERM filing date, YYYY-MM-DD")},
-            ["filed_date"],
-            lambda filed_date: lookup(client, "/estimate", {"filed": filed_date}),
+            {
+                "case_number": _string("The PERM case number, e.g. G-100-26045-123456, when the user gave one"),
+                "filed_date": _string("The PERM filing date, YYYY-MM-DD, when there is no case number"),
+            },
+            [],
+            lambda case_number=None, filed_date=None: estimate(client, case_number, filed_date),
         ),
         _tool("perm_queue", PERM_QUEUE, {}, [], lambda: lookup(client, "/queue", {})),
         _tool(
@@ -475,6 +557,15 @@ def keyed_tools(client: PermTrackerClient) -> list[Tool]:
     ]
 
 
+async def estimate(client: PermTrackerClient, case_number: str | None, filed_date: str | None) -> str:
+    """The estimate for a case number (preferred: the API uses the case's own status) or a filing date."""
+    if case_number:
+        return await lookup(client, "/estimate", {"case": case_number.strip()})
+    if filed_date:
+        return await lookup(client, "/estimate", {"filed": filed_date.strip()})
+    raise DataLookupError("give case_number or filed_date; ask the user for one if you have neither")
+
+
 async def match_employer(client: PermTrackerClient, name: str) -> str:
     """The lookup, with a line saying how far to trust the match and what to do next."""
     body = await client.get("/lookup/employer", {"name": name})
@@ -512,20 +603,26 @@ class PermTrackerClient:
         if response.status_code >= 400:
             raise DataLookupError(_error_message(response))
         try:
-            return response.json()
+            body = response.json()
         except ValueError:
             return response.text
+        if isinstance(body, dict) and response.headers.get(TRUNCATED_HEADER, "").lower() in ("1", "true"):
+            body[TRUNCATED] = True
+        return body
 
 
 def render(body: Any, note: str | None = None) -> str:
-    """A line with the data's date, an optional note, then the data as JSON, clipped."""
+    """A line with the data's date and the credit to give, an optional note, then the data as
+    JSON, clipped. An export cut short at the plan's row limit says so in the note."""
     if isinstance(body, str):
         return _clip(body)
     if not isinstance(body, dict) or "data" not in body:
         return _clip(json.dumps(body, ensure_ascii=False))
     as_of = (body.get("meta") or {}).get("asOf")
     dated = f"Department of Labor data as of {as_of}" if as_of else "Department of Labor data"
-    lines = [dated, note, json.dumps(body["data"], ensure_ascii=False)]
+    if body.get(TRUNCATED):
+        note = TRUNCATED_NOTE
+    lines = [f"{dated}; when you use it, {CREDIT}", note, json.dumps(body["data"], ensure_ascii=False)]
     return _clip("\n".join(line for line in lines if line))
 
 
