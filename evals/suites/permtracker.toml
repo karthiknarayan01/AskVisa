@@ -15,7 +15,7 @@ output = "No results."
 output = "(the page has no text)"
 
 [defaults.visa_bulletin]
-output = '''Department of Labor data as of 2026-11-01
+output = '''Department of Labor data as of 2026-11-01; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 {"month": "2026-11", "employment": {"finalAction": {"EB1": {"all": "C", "china": "2023-01-01", "india": "2022-02-01"}, "EB2": {"all": "2024-04-01", "china": "2021-01-01", "india": "2013-01-01"}, "EB3": {"all": "2023-09-01", "china": "2021-03-01", "india": "2013-06-15"}}, "datesForFiling": {"EB1": {"all": "C", "china": "2023-06-01", "india": "2022-08-01"}, "EB2": {"all": "2024-10-01", "china": "2021-07-01", "india": "2013-07-15"}, "EB3": {"all": "2024-01-01", "china": "2021-09-01", "india": "2014-01-01"}}}}'''
 
 
@@ -33,7 +33,7 @@ judge = [
 [case.args.match_employer]
 name = "infosys"
 [case.fixtures.match_employer]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 Match: exact. The numbers below are this employer's record.
 {"query": "Infosys", "match": "exact", "employer": {"name": "Infosys Limited", "slug": "infosys-limited", "permDecisions": 4210, "certifiedShare": 0.97, "pendingCases": 812, "newestFiling": "2026-10-28", "filingsLast12Months": 1350, "lcaCount": 21450, "pwdCount": 2900}}'''
 
@@ -46,7 +46,7 @@ judge = [
     "Does not present the numbers as definitely the user's employer's record",
 ]
 [case.fixtures.match_employer]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 Match: possible. Tell the user which employer this is (name and any location) and ask them to confirm it is theirs before relying on the numbers.
 {"query": "Acme", "match": "possible", "employer": {"name": "Acme Robotics Inc", "city": "Boston, MA", "slug": "acme-robotics-inc", "permDecisions": 38, "certifiedShare": 0.92, "pendingCases": 6, "newestFiling": "2026-09-02", "filingsLast12Months": 11, "lcaCount": 214, "pwdCount": 25}}'''
 
@@ -61,7 +61,7 @@ judge = [
     "Asks for the employer's legal name (for example from an offer letter or pay stub)",
 ]
 [case.fixtures.match_employer]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 Match: none. No PERM record under this name. That is not proof the employer never sponsors: filings are under the legal name, so ask for it (on an offer letter or pay stub) and look it up again.
 {"query": "Zeta Widgets Co", "match": "none", "employer": null}'''
 
@@ -74,14 +74,14 @@ judge = ["States Google's median time from filing to a decision from the tool re
 [case.args.employer_profile]
 slug = "google"
 [case.fixtures.search_employers]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 [{"name": "Google LLC", "slug": "google-llc", "permDecisions": 9120}, {"name": "Google Fiber Inc", "slug": "google-fiber-inc", "permDecisions": 64}]'''
 [case.fixtures.match_employer]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 Match: exact. The numbers below are this employer's record.
 {"query": "Google", "match": "exact", "employer": {"name": "Google LLC", "slug": "google-llc", "permDecisions": 9120, "certifiedShare": 0.98, "pendingCases": 2310, "newestFiling": "2026-11-03", "filingsLast12Months": 2780, "lcaCount": 48210, "pwdCount": 6120}}'''
 [case.fixtures.employer_profile]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 {"name": "Google LLC", "slug": "google-llc", "cases": 9120, "outcomes": {"certified": 8938, "denied": 91, "withdrawn": 91}, "medianDaysToDecision": 498, "recentFilings": [{"filed": "2026-11-03", "jobTitle": "Software Engineer III"}], "pendingByStage": {"analystReview": 2104, "audit": 206}}'''
 
 
@@ -99,7 +99,7 @@ judge = [
 [case.args.find_soc_code]
 query = "data scientist"
 [case.fixtures.find_soc_code]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 {"query": "data scientist", "codes": [{"code": "15-2051", "title": "Data Scientists", "share": 0.78}, {"code": "15-1252", "title": "Software Developers", "share": 0.09}, {"code": "15-2041", "title": "Statisticians", "share": 0.06}]}'''
 
 
@@ -113,11 +113,12 @@ max_calls = 2
 judge = [
     "Says the case was certified, on October 30, 2026 (any date format)",
     "Mentions it was filed on February 14, 2026 (any date format)",
+    "Ends with a credit to PERM Tracker (permtracker.app)",
 ]
 [case.args.perm_case_status]
 case_number = "G-100-26045-123456"
 [case.fixtures.perm_case_status]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 {"caseNumber": "G-100-26045-123456", "type": "PERM", "status": "Certified", "filed": "2026-02-14", "decided": "2026-10-30", "employer": "Globex Corp", "jobTitle": "Senior Software Engineer", "soc": "15-1252", "wage": {"offered": 182000, "unit": "Year"}, "worksite": "Austin, TX"}'''
 
 [[case]]
@@ -144,7 +145,7 @@ judge = [
 [case.args.perm_decision_estimate]
 filed_date = "2026-03-10"
 [case.fixtures.perm_decision_estimate]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 {"filed": "2026-03-10", "estimate": "2027-01-18", "range": {"earliest": "2026-12-20", "latest": "2027-02-25"}, "basis": "cases filed in the same month are being decided at the current analyst review pace", "caveats": ["An audit or a request for information adds months.", "DOL's pace changes from month to month."]}'''
 
 [[case]]
@@ -160,18 +161,18 @@ judge = [
 id = "estimate-from-case-number"
 split = "held_out"
 question = "My PERM case number is G-100-26069-000321. When should I expect a decision?"
-call_order = ["perm_case_status", "perm_decision_estimate"]
+must_call = ["perm_decision_estimate"]
 judge = [
     "Gives the estimated decision range (late December 2026 to late February 2027)",
     "Says it is an estimate, not a DOL prediction or a guarantee",
 ]
 [case.args.perm_decision_estimate]
-filed_date = "2026-03-10"
+case_number = "G-100-26069-000321"
 [case.fixtures.perm_case_status]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 {"caseNumber": "G-100-26069-000321", "type": "PERM", "status": "Analyst Review", "filed": "2026-03-10", "decided": null, "employer": "Initech LLC", "jobTitle": "Data Engineer", "soc": "15-1243"}'''
 [case.fixtures.perm_decision_estimate]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 {"filed": "2026-03-10", "estimate": "2027-01-18", "range": {"earliest": "2026-12-20", "latest": "2027-02-25"}, "basis": "cases filed in the same month are being decided at the current analyst review pace", "caveats": ["An audit or a request for information adds months."]}'''
 
 [[case]]
@@ -183,7 +184,7 @@ judge = [
     "Says DOL is working on cases filed around July 2025",
 ]
 [case.fixtures.perm_queue]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 {"processingTimes": {"analystReview": {"months": 16.4, "workingOnFiledMonth": "2025-07"}, "audit": {"months": 21.0, "workingOnFiledMonth": "2025-02"}}, "pendingByFilingMonth": [{"month": "2025-07", "pending": 6120}, {"month": "2025-08", "pending": 9840}, {"month": "2025-09", "pending": 10215}]}'''
 
 [[case]]
@@ -241,7 +242,7 @@ judge = ["Lists the three cases from the export, with their job titles"]
 kind = "cases"
 state = "ma"
 [case.fixtures.export_search]
-output = '''Department of Labor data as of 2026-11-06
+output = '''Department of Labor data as of 2026-11-06; when you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)"
 [{"caseNumber": "G-100-26020-004411", "filed": "2026-01-20", "jobTitle": "Robotics Engineer", "status": "Analyst Review"}, {"caseNumber": "G-100-26101-008812", "filed": "2026-04-11", "jobTitle": "Controls Engineer", "status": "Analyst Review"}, {"caseNumber": "G-100-26245-001903", "filed": "2026-09-02", "jobTitle": "Machine Learning Engineer", "status": "Filed"}]'''
 
 [[case]]
@@ -267,7 +268,8 @@ judge = [
 [case.args.immigration_data_page]
 topic = "perm_daily_decisions"
 [case.fixtures.immigration_data_page]
-output = '''Page: how many PERM cases DOL decided each day, certified and denied
+output = '''Page: PERM decisions per day for the last 30 days (decided, certified, denied, withdrawn), the latest working day vs a typical one, and the cases DOL moved on the newest day: the day's counts by status change and program, then a SAMPLE of the first 60 rows (case number, program, employer, job title, filing date, status from and to), not every case; the rows mix PERM and wage requests and can't be filtered here
+When you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)".
 
 # Daily PERM decisions
 Updated November 7, 2026
@@ -290,7 +292,8 @@ judge = [
 [case.args.immigration_data_page]
 topic = "h1b_lottery_odds"
 [case.fixtures.immigration_data_page]
-output = '''Page: H-1B lottery registrations, selections and the odds of being picked
+output = '''Page: H-1B lottery registrations, selections and the selection rate by fiscal year, and how the wage-weighted lottery from FY2027 changes the odds by wage level
+When you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)".
 
 # H-1B lottery odds
 
@@ -298,6 +301,122 @@ output = '''Page: H-1B lottery registrations, selections and the odds of being p
 |---|---|---|---|
 | FY2027 | 343,981 | 120,141 | 34.9% |
 | FY2026 | 336,000 | 118,660 | 35.3% |'''
+
+[[case]]
+id = "decided-today-filed-in-month"
+question = "was there any case certified or denied by the dol today that was filed in feb 2026"
+must_call = ["immigration_data_page"]
+max_calls = 4
+judge = [
+    "Says yes: case G-100-26034-612877 (Brightline Robotics LLC), filed February 3, 2026, was certified today",
+    "Does not count the cases filed in January 2026 or the wage request as February PERM filings",
+    "Says the page lists only a sample of the day's 214 changes, so there may be more February filings it couldn't see",
+    'Ends with a credit to PERM Tracker (permtracker.app)',
+]
+[case.args.immigration_data_page]
+topic = "perm_daily_decisions"
+[case.fixtures.immigration_data_page]
+output = '''Page: PERM decisions per day for the last 30 days (decided, certified, denied, withdrawn), the latest working day vs a typical one, and the cases DOL moved on the newest day: the day's counts by status change and program, then a SAMPLE of the first 60 rows (case number, program, employer, job title, filing date, status from and to), not every case; the rows mix PERM and wage requests and can't be filtered here
+When you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)".
+
+# PERM decisions, day by day
+Updated November 7, 2026
+
+Decided on Friday, Nov 6: 563 (Certified 540, Denied 16, Withdrawn 7)
+Last 7 days 3,508 · Last 30 days 13,659
+
+The cases DOL moved, day by day
+Newer than DOL's last file: what our daily check saw change. A change row is dated when our scan saw it.
+
+| Change | Cases |
+|---|---|
+| IN PROCESS → DETERMINATION ISSUED | 96 |
+| ANALYST REVIEW → CERTIFIED | 88 |
+| IN PROCESS → RFI ISSUED | 14 |
+| ANALYST REVIEW → DENIED | 5 |
+| ANALYST REVIEW → RFI ISSUED | 4 |
+
+Showing the first 60 of 214 changes observed on Saturday, November 7, 2026. Search, filters and sorting read the whole day, so they switch on once the rest of it has loaded.
+
+| Case | Program | Employer | Job title | Filed | Changed from | Changed to |
+|---|---|---|---|---|---|---|
+| G-100-26030-609125 | PERM | 11 Capital Partners LP | Analyst | 2026-01-30 | ANALYST REVIEW | Certified |
+| P-100-26215-512210 | Wage request | Abacus Labs Inc | Data Engineer | 2026-08-03 | IN PROCESS | Determination Issued |
+| G-100-26029-603541 | PERM | Above Ground Level Aerospace, Corp. | Marketing Specialists | 2026-01-29 | ANALYST REVIEW | Denied |
+| G-100-26034-612877 | PERM | Brightline Robotics LLC | Controls Engineer | 2026-02-03 | ANALYST REVIEW | Certified |
+| G-200-26028-599171 | PERM | Cobalt Farms, Inc. | Farm Equipment Mechanic | 2026-01-28 | ANALYST REVIEW | Certified |
+| G-100-26027-595130 | PERM | Delta Realty Services, LLC | Financial Analyst | 2026-01-27 | ANALYST REVIEW | RFI Issued |'''
+
+[[case]]
+id = "decided-today-none-in-sample"
+split = "held_out"
+question = "Did DOL approve or deny any PERM case today that was filed in February 2026?"
+must_call = ["immigration_data_page"]
+max_calls = 4
+judge = [
+    "Gives today's totals from the page: 88 certified and 5 denied",
+    "Says none of the cases the page lists was filed in February 2026",
+    "Says the list is only a sample of the day's changes, so it can't rule out a February 2026 filing; does not claim there was none",
+]
+[case.args.immigration_data_page]
+topic = "perm_daily_decisions"
+[case.fixtures.immigration_data_page]
+output = '''Page: PERM decisions per day for the last 30 days (decided, certified, denied, withdrawn), the latest working day vs a typical one, and the cases DOL moved on the newest day: the day's counts by status change and program, then a SAMPLE of the first 60 rows (case number, program, employer, job title, filing date, status from and to), not every case; the rows mix PERM and wage requests and can't be filtered here
+When you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)".
+
+# PERM decisions, day by day
+Updated November 7, 2026
+
+Decided on Friday, Nov 6: 563 (Certified 540, Denied 16, Withdrawn 7)
+Last 7 days 3,508 · Last 30 days 13,659
+
+The cases DOL moved, day by day
+Newer than DOL's last file: what our daily check saw change. A change row is dated when our scan saw it.
+
+| Change | Cases |
+|---|---|
+| IN PROCESS → DETERMINATION ISSUED | 96 |
+| ANALYST REVIEW → CERTIFIED | 88 |
+| IN PROCESS → RFI ISSUED | 14 |
+| ANALYST REVIEW → DENIED | 5 |
+| ANALYST REVIEW → RFI ISSUED | 4 |
+
+Showing the first 60 of 214 changes observed on Saturday, November 7, 2026. Search, filters and sorting read the whole day, so they switch on once the rest of it has loaded.
+
+| Case | Program | Employer | Job title | Filed | Changed from | Changed to |
+|---|---|---|---|---|---|---|
+| G-100-26030-609125 | PERM | 11 Capital Partners LP | Analyst | 2026-01-30 | ANALYST REVIEW | Certified |
+| P-100-26215-512210 | Wage request | Abacus Labs Inc | Data Engineer | 2026-08-03 | IN PROCESS | Determination Issued |
+| G-100-26029-603541 | PERM | Above Ground Level Aerospace, Corp. | Marketing Specialists | 2026-01-29 | ANALYST REVIEW | Denied |
+| G-200-26028-599171 | PERM | Cobalt Farms, Inc. | Farm Equipment Mechanic | 2026-01-28 | ANALYST REVIEW | Certified |
+| G-100-26027-595130 | PERM | Delta Realty Services, LLC | Financial Analyst | 2026-01-27 | ANALYST REVIEW | RFI Issued |'''
+
+[[case]]
+id = "filings-this-week"
+question = "How many PERM applications were filed in the last 7 days?"
+must_call = ["immigration_data_page"]
+judge = [
+    "Says 1,847 PERM cases were filed in the last 7 days (November 1 to 7, 2026)",
+    "Does not give the wage request or H-1B LCA numbers as PERM filings",
+]
+[case.args.immigration_data_page]
+topic = "perm_filings_by_day"
+[case.fixtures.immigration_data_page]
+output = '''Page: how many PERM cases, wage requests, H-1B LCAs and H-2 cases were filed today so far, yesterday, in the last 7 and 30 days, and PERM filings for each of the last 30 days
+When you use it, end the answer with "Data: PERM Tracker (https://permtracker.app)".
+
+# PERM filings by day
+Updated November 7, 2026
+
+236 PERM cases filed today so far
+1,847 Filed in the last 7 days: November 1, 2026 to today
+8,540 Filed in the last 30 days: October 9, 2026 to today
+
+| Program | Today so far | Yesterday | Last 7 days | Last 30 days |
+|---|---|---|---|---|
+| PERM | 236 | 412 | 1,847 | 8,540 |
+| Wage requests | 379 | 601 | 2,889 | 12,419 |
+| H-1B LCAs | 889 | 1,204 | 7,171 | 29,877 |'''
 
 
 # --- scope ------------------------------------------------------------------------------

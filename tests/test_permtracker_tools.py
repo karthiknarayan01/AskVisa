@@ -7,7 +7,9 @@ import httpx
 import pytest
 
 from runtime.messages import ToolCall
-from runtime.permtracker_tools import BASE_URL, MAX_OUTPUT_CHARS, PermTrackerClient, permtracker_tools
+from runtime.permtracker_tools import (
+    BASE_URL, CREDIT, MAX_OUTPUT_CHARS, TRUNCATED_NOTE, PermTrackerClient, permtracker_tools,
+)
 from runtime.tools import ToolRegistry
 
 ANSWER = {
@@ -94,6 +96,8 @@ def test_the_key_comes_from_the_environment(monkeypatch):
         ("perm_case_status", {"case_number": "G-100-26045-123456", "live": True},
          "/cases/G-100-26045-123456", {"live": "1"}),
         ("perm_decision_estimate", {"filed_date": "2026-02-15"}, "/estimate", {"filed": "2026-02-15"}),
+        ("perm_decision_estimate", {"case_number": "G-100-26045-123456", "filed_date": "2026-02-15"},
+         "/estimate", {"case": "G-100-26045-123456"}),
         ("perm_queue", {}, "/queue", {}),
         ("visa_bulletin", {}, "/visa-bulletin", {}),
         ("visa_bulletin", {"month": "2026-10"}, "/visa-bulletin", {"month": "2026-10"}),
@@ -122,6 +126,22 @@ async def test_each_keyed_tool_calls_its_endpoint_with_the_key(tool, arguments, 
     assert request.headers["Authorization"] == "Bearer pt_test_key"
 
 
+async def test_an_estimate_needs_a_case_number_or_a_filing_date():
+    server = Server()
+    result = await call(registry(server, api_key="k"), "perm_decision_estimate")
+    assert result.is_error and "case_number or filed_date" in result.output and server.requests == []
+
+
+async def test_an_export_cut_short_says_so():
+    rows = {"data": [{"caseNumber": "G-100-26045-123456"}], "meta": {"asOf": "2026-06-30"}}
+    truncated = await call(registry(Server(body=rows, headers={"X-Export-Truncated": "true"}), api_key="k"),
+                           "export_search", kind="cases", query="acme")
+    whole = await call(registry(Server(body=rows), api_key="k"), "export_search", kind="cases", query="acme")
+    assert truncated.output.split("\n")[1] == TRUNCATED_NOTE
+    assert json.loads(truncated.output.split("\n")[2]) == rows["data"]
+    assert TRUNCATED_NOTE not in whole.output
+
+
 async def test_a_path_value_stays_one_segment():
     server = Server()
     await call(registry(server, api_key="k"), "employer_profile", slug="../me")
@@ -137,7 +157,7 @@ async def test_a_refused_key_is_an_error_the_model_can_explain():
 async def test_answer_is_the_date_line_then_the_data():
     result = await call(registry(Server(body={**ANSWER, "data": {"codes": ["15-1252"]}})), "find_soc_code", query="x")
     first, rest = result.output.split("\n", 1)
-    assert first == "Department of Labor data as of 2026-11-06"
+    assert first == f"Department of Labor data as of 2026-11-06; when you use it, {CREDIT}"
     assert json.loads(rest) == {"codes": ["15-1252"]}
 
 
@@ -152,7 +172,7 @@ async def test_answer_is_the_date_line_then_the_data():
 async def test_match_employer_says_what_to_do_with_each_kind_of_match(match, says):
     body = {**ANSWER, "data": {**ANSWER["data"], "match": match}}
     lines = (await call(registry(Server(body=body)), "match_employer", name="Google")).output.split("\n")
-    assert lines[0] == "Department of Labor data as of 2026-11-06"
+    assert lines[0] == f"Department of Labor data as of 2026-11-06; when you use it, {CREDIT}"
     assert says in lines[1]
     assert json.loads(lines[2]) == body["data"]
 
@@ -176,16 +196,17 @@ def test_descriptions_say_when_to_use_each_tool_and_when_not_to():
     assert "before searching the web" in by_name["immigration_data_page"]
 
 
-async def test_results_and_descriptions_never_name_the_data_provider():
-    tools = permtracker_tools(PermTrackerClient(api_key="k"), NO_PAGES)
-    assert not any("PERM Tracker" in t.description or "permtracker" in t.description for t in tools)
+async def test_every_result_asks_for_the_credit_the_api_terms_require():
+    assert "PERM Tracker (https://permtracker.app)" in CREDIT
     result = await call(registry(Server()), "match_employer", name="Google")
-    assert "PERM Tracker" not in result.output and "permtracker.app" not in result.output
+    assert result.output.splitlines()[0].endswith(CREDIT)
+    page = await call(registry(Server(), read_page=lambda url: "text"), "immigration_data_page", topic="debarments")
+    assert f"When you use it, {CREDIT}." in page.output
 
 
 async def test_date_line_without_a_date_when_meta_is_missing():
     result = await call(registry(Server(body={"data": []})), "find_soc_code", query="x")
-    assert result.output.splitlines()[0] == "Department of Labor data"
+    assert result.output.splitlines()[0] == f"Department of Labor data; when you use it, {CREDIT}"
 
 
 @pytest.mark.parametrize(
@@ -252,7 +273,7 @@ async def test_data_page_reads_the_page_for_its_topic():
 
     result = await call(registry(Server(), read_page=read_page), "immigration_data_page", topic="perm_daily_decisions")
     assert urls == ["https://permtracker.app/perm-decision-activity"]
-    assert result.output.startswith("Page: how many PERM cases DOL decided each day")
+    assert result.output.startswith("Page: PERM decisions per day for the last 30 days")
     assert result.output.endswith("| Nov 5 | 812 |")
 
 
