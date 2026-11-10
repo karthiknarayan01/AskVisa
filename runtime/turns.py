@@ -7,6 +7,11 @@
     await turns.delete(session_id)               stop it if running, then delete the session
     turns.rename(session_id, "H-1B layoff")      give it a title, and tell every tab
 
+A session's first question also starts a background task that works out its topic (runtime/
+topics.py) and makes it the title, unless the session has one by then; tabs hear about it like
+a rename. It runs alongside the turn and never holds it up; if it fails, the title stays the
+first question.
+
 A turn runs as its own task, not tied to any connection. If a tab disconnects, the turn
 finishes and is saved, and a tab that connects later is sent everything it has done so far
 (snapshot()) before its live events. One turn runs per session at a time; starting another
@@ -19,16 +24,20 @@ session (TurnInterrupted); resume() finishes it instead.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from runtime.agent import Agent
 from runtime.api_events import conversation, to_wire
-from runtime.events import EventLog, SessionSummary
+from runtime.events import EventLog, SessionSummary, UnknownSession
 from runtime.live import LiveChannel
 from runtime.model import ModelError
 from runtime.session import CompactionFailed, MaxStepsReached, ReplyTruncated, Session, TurnResult
+from runtime.topics import topic_for
+
+logger = logging.getLogger(__name__)
 
 
 class TurnBusy(RuntimeError):
@@ -58,6 +67,7 @@ class Turns:
         self.live = live or LiveChannel()
         self._sessions: dict[str, Session] = {}
         self._running: dict[str, RunningTurn] = {}
+        self._naming: set[asyncio.Task] = set()
 
     def create(self) -> Session:
         session = Session.create(self.log, self.agent.model, self.agent.tools, **self.agent.session_options())
@@ -82,7 +92,13 @@ class Turns:
         self._refuse_if_running(session_id)
         if session.needs_resume:
             raise TurnInterrupted("the last turn was interrupted; resume it first")
-        return self._start(session, lambda: session.run_turn(text), base=[])
+        first_question = not any(m.role == "user" for m in session.state.messages)
+        done = self._start(session, lambda: session.run_turn(text), base=[])
+        if first_question and self.agent.topic_model is not None:
+            task = asyncio.create_task(self._name_after_topic(session_id, text))
+            self._naming.add(task)
+            task.add_done_callback(self._naming.discard)
+        return done
 
     def resume(self, session_id: str) -> asyncio.Task:
         """Finish an interrupted turn, published the same way. Raises UnknownSession, TurnBusy,
@@ -121,6 +137,11 @@ class Turns:
         self.live.publish({"type": "session", "session": summary})
         return summary
 
+    async def topics_settled(self) -> None:
+        """Wait for every topic still being worked out (for shutdown and tests)."""
+        if self._naming:
+            await asyncio.wait(list(self._naming))
+
     def snapshot(self) -> list[dict[str, Any]]:
         """Every running turn so far, for a tab that has just connected."""
         return [
@@ -135,6 +156,23 @@ class Turns:
     def describe(self, s: SessionSummary) -> dict[str, Any]:
         return {"id": s.session_id, "title": s.title, "created_at": s.created_at,
                 "updated_at": s.updated_at, "running": self.is_running(s.session_id)}
+
+    async def _name_after_topic(self, session_id: str, question: str) -> None:
+        """Title a new session with its topic, unless it has a title by then (the user renamed
+        it, or deleted it). Any failure leaves the first question as the title."""
+        try:
+            topic = await topic_for(self.agent.topic_model, question)
+        except Exception as e:  # a background nicety: never let it surface as an error
+            logger.warning("couldn't work out the topic of session %s: %s", session_id, e)
+            return
+        if topic is None:
+            return
+        try:
+            if not self.log.set_title(session_id, topic, only_if_unset=True):
+                return
+        except UnknownSession:
+            return
+        self.live.publish({"type": "session", "session": self.summary(session_id)})
 
     def _refuse_if_running(self, session_id: str) -> None:
         # A running turn is also an open one, so this is checked before needs_resume.
