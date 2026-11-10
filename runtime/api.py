@@ -5,6 +5,8 @@
     GET    /api/sessions                     recent sessions: [{"id", "title", "created_at", "updated_at", "running"}]
     POST   /api/sessions                     a new session: 201 {"id"}
     GET    /api/sessions/{id}                {"id", "title", "items", "running", "interrupted"}
+    PATCH  /api/sessions/{id}                rename it: {"title"} -> 200 with the session as listed,
+                                             422 for an empty or over-long title
     DELETE /api/sessions/{id}                delete the session and its history: 204 (a running
                                              turn is stopped first)
     WS     /api/ws                           the live channel: start, resume and stop turns, and
@@ -29,6 +31,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 
 from runtime.agent import Agent
 from runtime.api_events import conversation
@@ -37,6 +40,11 @@ from runtime.live import LiveChannel
 from runtime.turns import TurnBusy, TurnInterrupted, Turns
 
 MAX_MESSAGE_CHARS = 20_000
+MAX_TITLE_CHARS = 120
+
+
+class Rename(BaseModel):
+    title: str = Field(max_length=MAX_TITLE_CHARS)
 
 
 def create_app(
@@ -59,11 +67,7 @@ def create_app(
 
     @app.get("/api/sessions")
     async def list_sessions(limit: int = 50) -> list[dict]:
-        return [
-            {"id": s.session_id, "title": s.title, "created_at": s.created_at, "updated_at": s.updated_at,
-             "running": turns.is_running(s.session_id)}
-            for s in log.list_sessions(limit)
-        ]
+        return [turns.describe(s) for s in log.list_sessions(limit)]
 
     @app.post("/api/sessions", status_code=201)
     async def create_session() -> dict:
@@ -74,14 +78,23 @@ def create_app(
         session = _session(turns, session_id)
         request_ids = [e.request_id for e in log.load(session_id) if e.type == "user_message"]
         items = conversation(session.state, request_ids)
-        title = next((i["text"] for i in items if i["type"] == "user_message"), "")
         return {
             "id": session_id,
-            "title": title,
+            "title": log.session_summary(session_id).title,
             "items": items,
             "running": turns.is_running(session_id),
             "interrupted": session.needs_resume and not turns.is_running(session_id),
         }
+
+    @app.patch("/api/sessions/{session_id}")
+    async def rename_session(session_id: str, body: Rename) -> dict:
+        title = " ".join(body.title.split())
+        if not title:
+            raise HTTPException(422, "the title is empty")
+        try:
+            return turns.rename(session_id, title)
+        except UnknownSession:
+            raise HTTPException(404, f"no session {session_id}") from None
 
     @app.delete("/api/sessions/{session_id}", status_code=204)
     async def delete_session(session_id: str) -> Response:
