@@ -1,4 +1,4 @@
-/* The visa page: pale passport paper, navy ink, and violet stamp ink for the agent's lookups.
+/* The visa page: pale passport paper, navy ink, and violet ink for the agent's marks.
    Dark mode is the passport cover: navy, with cover-gold only on the seal. */
 
 :root {
@@ -14,11 +14,9 @@
   --refused: #b23a3a;
   --seal: #5a3e9e;
   --focus: #5a3e9e;
-  --stamp-blend: multiply;
   --shadow: 0 1px 0 rgba(24, 36, 71, 0.06), 0 8px 30px -12px rgba(24, 36, 71, 0.22);
 
   --sans: "Public Sans", system-ui, sans-serif;
-  --stamp-face: "Saira Extra Condensed", "Arial Narrow", sans-serif;
 
   /* Type scale: a perfect fourth from 16px. */
   --step--1: 0.8125rem;
@@ -47,7 +45,6 @@
     --refused: #e58a8a;
     --seal: #c8a35a;
     --focus: #c8a35a;
-    --stamp-blend: screen;
     --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 10px 40px -14px rgba(0, 0, 0, 0.7);
     color-scheme: dark;
   }
@@ -693,55 +690,42 @@ a {
   white-space: pre-wrap;
 }
 
-.working {
-  margin: 0.5rem 0;
-  color: var(--muted);
-  font-size: 0.92rem;
+/* activity: the agent's steps as one quiet line, which opens to list them */
+
+.activity {
+  margin: 0.1rem 0 0.8rem;
 }
 
-.working::after {
-  content: "";
-  display: inline-block;
-  width: 1.2em;
-  text-align: left;
-  animation: ellipsis 1.4s steps(4, end) infinite;
-}
-
-@keyframes ellipsis {
-  0% { content: ""; }
-  25% { content: "."; }
-  50% { content: ".."; }
-  75% { content: "..."; }
-}
-
-/* thinking: quiet, collapsible; a moving sheen on the label while it happens */
-
-.thinking {
-  margin: 0.25rem 0 0.75rem;
-}
-
-.thinking__toggle {
+.activity__toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.2rem 0.3rem 0.2rem 0;
+  max-width: 100%;
+  padding: 0.15rem 0;
   border: 0;
   background: none;
   color: var(--muted);
+  font: inherit;
   font-size: 0.9rem;
+  text-align: left;
   cursor: pointer;
 }
 
-.thinking__chevron {
-  display: inline-grid;
-  transition: transform 0.2s;
+.activity__toggle:disabled {
+  cursor: default;
 }
 
-.thinking__chevron--open {
-  transform: rotate(90deg);
+.activity__toggle:not(:disabled):hover {
+  color: var(--ink-soft);
 }
 
-.thinking--active .thinking__label {
+.activity__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity__toggle--active .activity__text {
   background: linear-gradient(100deg, var(--muted) 30%, var(--stamp) 50%, var(--muted) 70%) 0 0 / 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -753,171 +737,40 @@ a {
   to { background-position: -150% 0; }
 }
 
-.thinking__preview,
-.thinking__text {
-  margin: 0.3rem 0 0 1.25rem;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.55;
+.activity__chevron {
+  display: inline-grid;
+  flex: none;
+  transition: transform 0.2s;
 }
 
-.thinking__preview {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  mask-image: linear-gradient(90deg, #000 70%, transparent);
+.activity__chevron--open {
+  transform: rotate(90deg);
 }
 
-.thinking__text {
-  white-space: pre-wrap;
-  max-height: 18rem;
-  overflow-y: auto;
-  padding-left: 0.75rem;
+.activity__steps {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.4rem 0 0;
+  padding: 0 0 0 0.75rem;
   border-left: 1px solid var(--rule);
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
 }
 
-/* ---- stamps: the agent's lookups ----------------------------------------------------------- */
-
-.stamps {
-  margin: 0.4rem 0 1.1rem;
-}
-
-.stamps__row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem 1.25rem;
-  align-items: flex-start;
-}
-
-.stamps__item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-  width: 11.5rem;
-}
-
-.stamp {
-  --ink-color: var(--stamp);
-  padding: 0;
-  border: 0;
-  background: none;
-  transform: rotate(var(--tilt));
-  cursor: pointer;
-  color: var(--ink-color);
-  mix-blend-mode: var(--stamp-blend);
-}
-
-.stamp:disabled {
-  cursor: default;
-}
-
-.stamp__ink {
-  position: relative;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1rem;
-  padding: 0.55rem 0.95rem 0.5rem;
-  font-family: var(--stamp-face);
-  text-transform: uppercase;
-  line-height: 1.05;
-  text-align: left;
-}
-
-/* The frame: a heavy outer rule and a fine inner one, roughened like ink on paper. The
-   lettering stays crisp so it reads at small sizes. */
-.stamp__ink::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 2.25px solid currentColor;
-  border-radius: 7px;
-  box-shadow: inset 0 0 0 3px transparent, inset 0 0 0 4px currentColor;
-  filter: url(#ink);
-  pointer-events: none;
-}
-
-.stamp__title {
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: 0.045em;
-}
-
-.stamp__detail {
-  max-width: 13rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  opacity: 0.85;
-}
-
-.stamp__status {
-  margin-top: 0.15rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  opacity: 0.75;
-}
-
-.stamp--queued,
-.stamp--running {
-  --ink-color: var(--muted);
-}
-
-.stamp--queued .stamp__ink::before,
-.stamp--running .stamp__ink::before {
-  border-style: dashed;
-  box-shadow: none;
-  filter: none;
-}
-
-.stamp--running .stamp__ink {
-  animation: breathe 1.6s ease-in-out infinite;
-}
-
-@keyframes breathe {
-  50% { opacity: 0.45; }
-}
-
-.stamp--error {
-  --ink-color: var(--refused);
-}
-
-.stamp--skipped {
-  --ink-color: var(--muted);
-  opacity: 0.6;
-}
-
-.stamp:not(:disabled):hover .stamp__ink {
-  background: color-mix(in srgb, var(--ink-color) 7%, transparent);
-}
-
-.stamps__summary {
-  margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.4;
-  color: var(--ink-soft);
-}
-
-.stamp-details {
-  overflow: hidden;
-}
-
-.stamp-details pre {
-  margin: 0.9rem 0 0;
-  max-height: 16rem;
-  overflow: auto;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--rule);
-  border-radius: 10px;
-  background: var(--paper-raised);
-  font: 400 0.8rem/1.5 var(--sans);
+.activity__thinking {
+  max-height: 14rem;
+  overflow-y: auto;
   white-space: pre-wrap;
-  word-break: break-word;
+}
+
+.activity__tool--error {
+  color: var(--refused);
+}
+
+.activity__summary {
+  display: block;
   color: var(--ink-soft);
 }
 
@@ -1171,18 +1024,6 @@ a {
 
   .examples {
     grid-template-columns: 1fr;
-  }
-
-  .stamps__row {
-    gap: 1rem;
-  }
-
-  .stamps__item {
-    width: calc(50% - 0.5rem);
-  }
-
-  .stamp__title {
-    font-size: 1.05rem;
   }
 
   .empty__rosette {

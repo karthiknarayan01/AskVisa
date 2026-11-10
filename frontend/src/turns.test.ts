@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, fromItems, fromSnapshot, mergeTurns, newTurn, type Turn } from "./turns";
+import { applyEvent, fromItems, fromSnapshot, mergeTurns, newTurn, type Step, type ToolView, type Turn } from "./turns";
 import type { StreamEvent } from "./types";
-import { stampText, tilt } from "./tools";
+import { activityLine, toolLine } from "./activity";
+import { describeCall } from "./tools";
 
 const play = (events: StreamEvent[]): Turn => events.reduce(applyEvent, newTurn("Does Acme sponsor?"));
 
@@ -124,15 +125,42 @@ describe("showing a conversation", () => {
   });
 });
 
-describe("stamps", () => {
-  it("say what was looked up", () => {
-    expect(stampText("read_regulation", { section: "214.2", paragraph: "(f)(10)" })).toEqual(["8 CFR 214.2(f)(10)", ""]);
-    expect(stampText("read_web_page", { url: "https://www.uscis.gov/i-485" })).toEqual(["Web page", "uscis.gov"]);
-    expect(stampText("unknown_tool", {})).toEqual(["unknown tool", ""]);
+describe("a tool call's phrase", () => {
+  it("says what is being looked up, while it runs and once it has", () => {
+    expect(describeCall("read_regulation", { section: "214.2", paragraph: "(f)(10)" })).toEqual({
+      doing: "Reading 8 CFR 214.2(f)(10)",
+      done: "Read 8 CFR 214.2(f)(10)",
+    });
+    expect(describeCall("read_web_page", { url: "https://www.uscis.gov/i-485" }).done).toBe("Read uscis.gov");
+    expect(describeCall("visa_bulletin", { month: "2026-11" }).doing).toBe("Reading the November 2026 visa bulletin");
+    expect(describeCall("web_search", {}).doing).toBe("Searching the web");
+    expect(describeCall("unknown_tool", {}).done).toBe("Checked unknown tool");
+  });
+});
+
+describe("a turn's activity line", () => {
+  const tool = (id: string, name: string, status: ToolView["status"], args = {}): ToolView => ({
+    id, name, arguments: args, status, summary: "", output: "",
+  });
+  const lookups: Step[] = [
+    { kind: "thinking", text: "Check the employer first." },
+    { kind: "tools", tools: [tool("a", "match_employer", "done", { name: "Infosys" }), tool("b", "perm_queue", "running")] },
+  ];
+
+  it("says what the agent is doing while it works", () => {
+    expect(activityLine([], true)).toEqual({ text: "Thinking", active: true });
+    expect(activityLine(lookups.slice(0, 1), true)).toEqual({ text: "Thinking", active: true });
+    expect(activityLine(lookups, true)).toEqual({ text: "Checking DOL’s PERM queue", active: true });
   });
 
-  it("tilt the same way every time, within 3 degrees", () => {
-    expect(tilt("c1")).toBe(tilt("c1"));
-    for (const id of ["a", "b", "call_123", "x".repeat(40)]) expect(Math.abs(tilt(id))).toBeLessThanOrEqual(3);
+  it("sums up what it did once the answer starts", () => {
+    const answered: Step[] = [...lookups, { kind: "answer", text: "Yes." }];
+    expect(activityLine(answered, true)).toEqual({ text: "Looked up Infosys’s sponsorship record, and 1 more", active: false });
+    expect(activityLine([lookups[0], { kind: "answer", text: "Yes." }], false)).toEqual({ text: "Thought it through", active: false });
+    expect(activityLine([{ kind: "answer", text: "Hi." }], false)).toBeNull();
+  });
+
+  it("marks a failed lookup in the step list", () => {
+    expect(toolLine(tool("c", "perm_queue", "error"))).toBe("Checked DOL’s PERM queue: not available");
   });
 });
