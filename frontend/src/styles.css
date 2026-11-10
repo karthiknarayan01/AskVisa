@@ -126,6 +126,17 @@ a {
   min-height: 3.5rem;
 }
 
+.topbar__title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--step-0);
+  font-weight: 600;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .topbar__model {
   margin-left: auto;
   font-size: var(--step--1);
@@ -287,8 +298,26 @@ a {
   padding-right: 2.1rem;
 }
 
-/* The bin sits over the end of the title, shown on hover or keyboard focus (always on touch). */
-.history__delete {
+.history__row .history__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.history__title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history__running {
+  flex: none;
+}
+
+/* The ⋯ button at the end of every row: faint until the row is hovered, focused or open. */
+.history__dots {
   position: absolute;
   top: 50%;
   right: 0.25rem;
@@ -301,27 +330,99 @@ a {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0;
-  transform: translateY(-50%) scale(0.9);
-  transition: opacity 0.15s ease, transform 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  opacity: 0.45;
+  transform: translateY(-50%);
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
 }
 
-.history__row:hover .history__delete,
-.history__row:focus-within .history__delete {
+.history__row:hover .history__dots,
+.history__row:focus-within .history__dots,
+.history__row--menu .history__dots,
+.history__item--current + .history__dots {
   opacity: 1;
-  transform: translateY(-50%) scale(1);
 }
 
-.history__delete:hover,
-.history__delete:focus-visible {
+.history__dots:hover,
+.history__dots:focus-visible,
+.history__row--menu .history__dots {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.history__rename {
+  display: block;
+  width: 100%;
+  padding: 0.36rem 0.5rem;
+  border: 1px solid var(--stamp);
+  border-radius: 8px;
+  background: var(--paper-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--stamp) 18%, transparent);
+}
+
+/* The row's menu floats above everything, next to its ⋯ button. */
+.row-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 9.5rem;
+  padding: 0.3rem;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--paper-raised);
+  box-shadow: 0 10px 28px -12px color-mix(in srgb, var(--ink) 45%, transparent),
+    0 2px 6px -2px color-mix(in srgb, var(--ink) 18%, transparent);
+  transform-origin: top right;
+  animation: menu-in 0.14s ease-out;
+}
+
+.row-menu--above {
+  transform-origin: bottom right;
+}
+
+.row-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-menu__item svg {
+  color: var(--muted);
+}
+
+.row-menu__item:hover,
+.row-menu__item:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.row-menu__item--danger,
+.row-menu__item--danger svg {
   color: var(--refused);
-  background: color-mix(in srgb, var(--refused) 12%, transparent);
 }
 
-@media (hover: none) {
-  .history__delete {
-    opacity: 0.75;
-    transform: translateY(-50%);
+.row-menu__item--danger:hover,
+.row-menu__item--danger:focus-visible {
+  background: color-mix(in srgb, var(--refused) 11%, transparent);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-3px);
   }
 }
 
