@@ -36,6 +36,11 @@ export default function App() {
     chat.send(text);
   };
 
+  const title = chat.sessions.find((s) => s.id === chat.sessionId)?.title ?? "";
+  useEffect(() => {
+    document.title = title || "AskVisa";
+  }, [title]);
+
   const modelNote = chat.model
     ? chat.model.provider === "ollama"
       ? `${chat.model.model}, running on this computer`
@@ -51,6 +56,7 @@ export default function App() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         onOpen={(id) => chat.navigate(id)}
+        onRename={chat.rename}
         onDelete={chat.remove}
       />
       {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} />}
@@ -59,6 +65,7 @@ export default function App() {
           <button type="button" className="icon-button topbar__menu" onClick={() => setMenuOpen(true)} aria-label="Show conversations">
             <MenuIcon />
           </button>
+          {title && <h1 className="topbar__title">{title}</h1>}
           <span className="topbar__model">{modelNote}</span>
           {chat.status === "reconnecting" && (
             <span className="topbar__status" role="status">

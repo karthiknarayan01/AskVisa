@@ -1,4 +1,5 @@
-// The HTTP part of the API (runtime/api.py): listing, opening, creating and deleting sessions.
+// The HTTP part of the API (runtime/api.py): listing, opening, creating, renaming and deleting
+// sessions.
 // Turns themselves run over the live channel (live.ts).
 
 import type { SessionSummary, StoredSession } from "./types";
@@ -22,7 +23,12 @@ export const api = {
   sessions: () => fetch("/api/sessions").then((r) => json<SessionSummary[]>(r)),
   session: (id: string) => fetch(`/api/sessions/${id}`).then((r) => json<StoredSession>(r)),
   create: () => fetch("/api/sessions", { method: "POST" }).then((r) => json<{ id: string }>(r)),
-  cancel: (id: string) => fetch(`/api/sessions/${id}/cancel`, { method: "POST" }),
+  rename: (id: string, title: string) =>
+    fetch(`/api/sessions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }).then((r) => json<SessionSummary>(r)),
   remove: async (id: string) => {
     const response = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
     if (!response.ok && response.status !== 404) await json(response);

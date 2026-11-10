@@ -178,6 +178,20 @@ export function useChat() {
     }
   }, [sessionId, stored, command]);
 
+  /** Rename a conversation. The list shows the new title at once; every tab hears it from the server. */
+  const rename = useCallback(
+    async (id: string, title: string) => {
+      setSessions((all) => all.map((s) => (s.id === id ? { ...s, title } : s)));
+      try {
+        await api.rename(id, title);
+      } catch (e) {
+        setServerError(e instanceof Error ? e.message : "The conversation couldn't be renamed.");
+        refreshSessions();
+      }
+    },
+    [refreshSessions],
+  );
+
   /** Delete a conversation. It leaves the list at once; if it is open, the app goes to a new question. */
   const remove = useCallback(
     async (id: string) => {
@@ -204,6 +218,6 @@ export function useChat() {
 
   return {
     sessions, sessionId, turns, running, interrupted, error, model, status,
-    send, stop, resume, navigate, remove,
+    send, stop, resume, navigate, rename, remove,
   };
 }
